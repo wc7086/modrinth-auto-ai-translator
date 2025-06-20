@@ -31,7 +31,7 @@ This project provides a comprehensive GitHub Actions workflow that:
    - Go to Actions → "Auto Translate and Release"
    - Click "Run workflow"
    - Select your preferred options:
-     - OpenAI model (gpt-4-turbo recommended)
+     - OpenAI model (gpt-4o-mini default, supports any OpenAI model)
      - Target language (default: 简体中文)
      - API endpoint (optional custom endpoint)
      - Release tag (optional, auto-generated if empty)
@@ -43,7 +43,7 @@ This project provides a comprehensive GitHub Actions workflow that:
 
 | Parameter | Description | Default | Required |
 |-----------|-------------|---------|----------|
-| `openai_model` | OpenAI model to use | `gpt-4-turbo` | Yes |
+| `openai_model` | OpenAI model to use | `gpt-4o-mini` | Yes |
 | `api_endpoint` | API endpoint URL | `https://api.openai.com/v1` | No |
 | `target_language` | Target language for translation | `简体中文` | No |
 | `release_tag` | Release tag to use | Auto-generated | No |
@@ -163,6 +163,24 @@ The system excludes common technical terms and code elements. To customize this 
    - Ensure `apps/app-frontend` directory exists
    - Check file extensions are supported
    - Review extraction patterns for your project
+
+4. **Text Replacement Errors**
+   - `Cannot read properties of undefined (reading 'replace')` - Fixed in v1.1
+   - Translation mapping contains invalid data - Check `translation-mapping.json` format
+   - Regex errors with special characters - Use test script to validate
+
+### Debugging Commands
+
+```bash
+# Test text replacement logic
+node scripts/test-replacement.js
+
+# Run in dry-run mode to test without changes
+# Set dry_run: true in workflow inputs
+
+# Check translation mapping validity
+cat translation-mapping.json | jq 'to_entries | map(select(.value != null and .value != ""))'
+```
 
 ### Debug Mode
 Set `dry_run: true` to test the translation process without building or releasing.

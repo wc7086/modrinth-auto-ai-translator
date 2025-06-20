@@ -6,13 +6,8 @@ on:
       openai_model:
         description: 'OpenAI Model'
         required: true
-        default: 'gpt-4-turbo'
-        type: choice
-        options:
-          - 'gpt-3.5-turbo'
-          - 'gpt-4'
-          - 'gpt-4-turbo'
-          - 'gpt-4o'
+        default: 'gpt-4o-mini'
+        type: string
       api_endpoint:
         description: 'API Endpoint (optional, defaults to OpenAI official)'
         required: false

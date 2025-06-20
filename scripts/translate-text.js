@@ -6,7 +6,7 @@ const path = require('path');
 class AITranslator {
   constructor() {
     this.apiKey = process.env.OPENAI_API_KEY;
-    this.model = process.env.OPENAI_MODEL || 'gpt-4-turbo';
+    this.model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
     this.apiEndpoint = process.env.API_ENDPOINT || 'https://api.openai.com/v1';
     this.targetLanguage = process.env.TARGET_LANGUAGE || '简体中文';
     

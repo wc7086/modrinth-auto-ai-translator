@@ -56,10 +56,26 @@ class TextReplacer {
     
     const mappingData = JSON.parse(fs.readFileSync(mappingPath, 'utf8'));
     
-    // Convert to Map for efficient lookups
+    if (!mappingData || typeof mappingData !== 'object') {
+      throw new Error('Invalid translation mapping data');
+    }
+    
+    // Convert to Map for efficient lookups with validation
+    let validMappings = 0;
     Object.entries(mappingData).forEach(([original, translated]) => {
-      this.replacements.set(original, translated);
+      // Validate both original and translated are non-empty strings
+      if (original && translated && 
+          typeof original === 'string' && 
+          typeof translated === 'string' &&
+          original.trim().length > 0 && 
+          translated.trim().length > 0 &&
+          original !== translated) {
+        this.replacements.set(original.trim(), translated.trim());
+        validMappings++;
+      }
     });
+    
+    console.log(`   ✓ Loaded ${validMappings} valid translation mappings`);
   }
 
   async createBackup() {
@@ -128,25 +144,49 @@ class TextReplacer {
       
       // Perform replacements
       for (const [original, translated] of this.replacements) {
-        const regex = this.createReplacementRegex(original);
-        const matches = [...modifiedContent.matchAll(regex)];
-        
-        if (matches.length > 0) {
-          modifiedContent = modifiedContent.replace(regex, (match, ...groups) => {
-            // Preserve the context around the text
-            return match.replace(original, translated);
-          });
+        try {
+          // Skip if original or translated is undefined/null/empty
+          if (!original || !translated || original === translated) {
+            continue;
+          }
           
-          fileReplacements += matches.length;
-          changes.push({
-            original,
-            translated,
-            occurrences: matches.length,
-            contexts: matches.map(m => ({
-              match: m[0],
-              index: m.index
-            }))
-          });
+          // Additional validation
+          if (typeof original !== 'string' || typeof translated !== 'string') {
+            console.warn(`   ⚠️  Invalid replacement pair: ${typeof original} -> ${typeof translated}`);
+            continue;
+          }
+          
+          const regex = this.createReplacementRegex(original);
+          
+          // Use a safer approach to find matches
+          let match;
+          const matches = [];
+          const tempRegex = new RegExp(regex.source, regex.flags);
+          
+          while ((match = tempRegex.exec(modifiedContent)) !== null) {
+            matches.push({
+              match: match[0],
+              index: match.index
+            });
+            // Prevent infinite loop
+            if (!tempRegex.global) break;
+          }
+          
+          if (matches.length > 0) {
+            // Simple direct replacement
+            modifiedContent = modifiedContent.replace(regex, translated);
+            
+            fileReplacements += matches.length;
+            changes.push({
+              original,
+              translated,
+              occurrences: matches.length,
+              contexts: matches
+            });
+          }
+          
+        } catch (replaceError) {
+          console.warn(`   ⚠️  Error replacing "${original}": ${replaceError.message}`);
         }
       }
       
@@ -166,37 +206,22 @@ class TextReplacer {
       
     } catch (error) {
       console.warn(`⚠️  Error processing ${filePath}: ${error.message}`);
+      console.warn(`   Stack trace: ${error.stack}`);
     }
   }
 
   createReplacementRegex(text) {
-    // Escape special regex characters
-    const escapedText = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    
-    // Create regex that matches the text in various contexts
-    // This handles common patterns like:
-    // - "text" (quoted strings)
-    // - >text< (between HTML tags)
-    // - text within template literals
-    
-    const patterns = [
-      // Quoted strings (single, double, backticks)
-      `(['"\`])${escapedText}\\1`,
-      // HTML content between tags
-      `(>)${escapedText}(<)`,
-      // Template literals with interpolation
-      `(\\$\\{[^}]*\\s+)${escapedText}([^}]*\\})`,
-      // Attribute values
-      `(=\\s*['"])${escapedText}(['"])`,
-      // Simple text (as fallback)
-      `\\b${escapedText}\\b`
-    ];
-    
-    // Use a more specific pattern that preserves context
-    return new RegExp(
-      `(['"\`>]?)${escapedText}(['"\`<]?)`,
-      'g'
-    );
+    try {
+      // Escape special regex characters
+      const escapedText = text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      
+      // Return a simple global regex for exact text matching
+      return new RegExp(escapedText, 'g');
+    } catch (error) {
+      console.warn(`   ⚠️  Error creating regex for text: "${text}"`);
+      // Return a regex that matches nothing if there's an error
+      return /(?!.*)/g;
+    }
   }
 
   async generateReport() {
