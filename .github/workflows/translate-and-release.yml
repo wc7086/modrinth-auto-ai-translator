@@ -357,6 +357,48 @@ jobs:
           cargo --version
           echo "🔧 Build platform: ${{ matrix.platform }}"
           
+      - name: Setup SQLx offline mode
+        shell: bash
+        run: |
+          cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
+          echo "🗄️ Setting up SQLx offline compilation..."
+          
+          # Find src-tauri or similar Rust directories
+          RUST_DIR=""
+          if [ -d "src-tauri" ]; then
+            RUST_DIR="src-tauri"
+          elif [ -d "tauri" ]; then
+            RUST_DIR="tauri"
+          else
+            # Look for Cargo.toml files
+            RUST_DIR=$(find . -name "Cargo.toml" -type f | head -1 | xargs dirname)
+          fi
+          
+          if [ -n "$RUST_DIR" ] && [ -d "$RUST_DIR" ]; then
+            echo "📁 Found Rust directory: $RUST_DIR"
+            cd "$RUST_DIR"
+            
+            # Install SQLx CLI if not present
+            if ! command -v sqlx &> /dev/null; then
+              echo "📦 Installing SQLx CLI..."
+              cargo install sqlx-cli --no-default-features --features sqlite,postgres,mysql
+            fi
+            
+            # Try to prepare SQLx cache with a test database
+            echo "🔧 Preparing SQLx cache..."
+            # Create a temporary in-memory database for cache generation
+            export DATABASE_URL="sqlite::memory:"
+            
+            # Try to generate SQLx cache
+            cargo sqlx prepare --workspace || echo "⚠️ SQLx prepare failed, continuing with SQLX_OFFLINE=true"
+            
+            # List any generated cache files
+            echo "📄 SQLx cache files:"
+            find . -name "sqlx-data.json" -o -name ".sqlx" -type d 2>/dev/null || echo "No SQLx cache files found"
+          else
+            echo "⚠️ No Rust directory found, skipping SQLx setup"
+          fi
+          
       - name: Build application
         shell: bash
         run: |
