@@ -147,60 +147,95 @@ class TextExtractor {
   }
 
   extractTextFromTemplate(content, filePath) {
-    // Remove Vue directives and interpolations temporarily
-    const cleanContent = content
-      .replace(/\{\{[^}]+\}\}/g, '') // Remove interpolations
-      .replace(/v-[a-z-]+="[^"]*"/g, '') // Remove Vue directives
-      .replace(/@[a-z-]+="[^"]*"/g, ''); // Remove event handlers
-    
-    // Extract text between HTML tags
-    const textMatches = cleanContent.match(/>([^<>{}\n\r]{3,})</g);
-    if (textMatches) {
-      textMatches.forEach(match => {
-        const text = match.slice(1, -1).trim();
-        if (this.isTranslatable(text)) {
-          this.addText(text, filePath, 'template');
-        }
-      });
-    }
-    
-    // Extract text from common attributes
-    const attrMatches = content.match(/(title|placeholder|alt|aria-label)="([^"]{3,})"/g);
-    if (attrMatches) {
-      attrMatches.forEach(match => {
-        const text = match.split('="')[1].slice(0, -1);
-        if (this.isTranslatable(text)) {
-          this.addText(text, filePath, 'attribute');
-        }
-      });
+    try {
+      // Remove Vue directives and interpolations temporarily
+      const cleanContent = content
+        .replace(/\{\{[^}]+\}\}/g, '') // Remove interpolations
+        .replace(/v-[a-z-]+="[^"]*"/g, '') // Remove Vue directives
+        .replace(/@[a-z-]+="[^"]*"/g, ''); // Remove event handlers
+      
+      // Extract text between HTML tags
+      const textMatches = cleanContent.match(/>([^<>{}\n\r]{3,})</g);
+      if (textMatches) {
+        textMatches.forEach(match => {
+          try {
+            const text = match.slice(1, -1).trim();
+            if (this.isTranslatable(text)) {
+              this.addText(text, filePath, 'template');
+            }
+          } catch (error) {
+            console.warn(`   ⚠️  Error processing template match: ${error.message}`);
+          }
+        });
+      }
+      
+      // Extract text from common attributes
+      const attrMatches = content.match(/(title|placeholder|alt|aria-label)="([^"]{3,})"/g);
+      if (attrMatches) {
+        attrMatches.forEach(match => {
+          try {
+            const parts = match.split('="');
+            if (parts.length >= 2) {
+              const text = parts[1].slice(0, -1);
+              if (this.isTranslatable(text)) {
+                this.addText(text, filePath, 'attribute');
+              }
+            }
+          } catch (error) {
+            console.warn(`   ⚠️  Error processing attribute match: ${error.message}`);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn(`   ⚠️  Error in extractTextFromTemplate: ${error.message}`);
     }
   }
 
   extractTextFromScript(content, filePath) {
-    const stringMatches = content.match(this.patterns.js.string);
-    if (stringMatches) {
-      stringMatches.forEach(match => {
-        const text = match.slice(1, -1); // Remove quotes
-        if (this.isTranslatable(text)) {
-          this.addText(text, filePath, 'string');
-        }
-      });
+    try {
+      const stringMatches = content.match(this.patterns.js.string);
+      if (stringMatches) {
+        stringMatches.forEach(match => {
+          try {
+            if (match && match.length >= 2) {
+              const text = match.slice(1, -1); // Remove quotes
+              if (this.isTranslatable(text)) {
+                this.addText(text, filePath, 'string');
+              }
+            }
+          } catch (error) {
+            console.warn(`   ⚠️  Error processing script match: ${error.message}`);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn(`   ⚠️  Error in extractTextFromScript: ${error.message}`);
     }
   }
 
   extractTextFromJSX(content, filePath) {
-    // First extract regular strings
-    this.extractTextFromScript(content, filePath);
-    
-    // Then extract JSX text content
-    const jsxMatches = content.match(this.patterns.js.jsx);
-    if (jsxMatches) {
-      jsxMatches.forEach(match => {
-        const text = match.slice(1, -1).trim();
-        if (this.isTranslatable(text)) {
-          this.addText(text, filePath, 'jsx');
-        }
-      });
+    try {
+      // First extract regular strings
+      this.extractTextFromScript(content, filePath);
+      
+      // Then extract JSX text content
+      const jsxMatches = content.match(this.patterns.js.jsx);
+      if (jsxMatches) {
+        jsxMatches.forEach(match => {
+          try {
+            if (match && match.length >= 2) {
+              const text = match.slice(1, -1).trim();
+              if (this.isTranslatable(text)) {
+                this.addText(text, filePath, 'jsx');
+              }
+            }
+          } catch (error) {
+            console.warn(`   ⚠️  Error processing JSX match: ${error.message}`);
+          }
+        });
+      }
+    } catch (error) {
+      console.warn(`   ⚠️  Error in extractTextFromJSX: ${error.message}`);
     }
   }
 
@@ -254,14 +289,22 @@ class TextExtractor {
   }
 
   addText(text, filePath, context) {
-    const trimmedText = text.trim();
-    if (trimmedText) {
-      this.extractedTexts.push({
-        text: trimmedText,
-        file: filePath,
-        context,
-        line: this.getLineNumber(text, filePath)
-      });
+    try {
+      if (!text || typeof text !== 'string') {
+        return;
+      }
+      
+      const trimmedText = text.trim();
+      if (trimmedText) {
+        this.extractedTexts.push({
+          text: trimmedText,
+          file: filePath,
+          context,
+          line: this.getLineNumber(text, filePath)
+        });
+      }
+    } catch (error) {
+      console.warn(`   ⚠️  Error adding text: ${error.message}`);
     }
   }
 

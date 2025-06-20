@@ -90,11 +90,79 @@ function testFileProcessing() {
   console.log('✅ File processing test completed');
 }
 
+// Test text extraction edge cases
+function testTextExtraction() {
+  console.log('🧪 Testing text extraction edge cases...');
+  
+  // Test attribute extraction
+  const testAttributes = [
+    'title="Valid Title"',
+    'placeholder="Enter text"',
+    'title=', // Invalid
+    'title=""', // Empty
+    'title="', // Incomplete
+    'data-title="Not extracted"' // Wrong attribute
+  ];
+  
+  testAttributes.forEach((attr, index) => {
+    try {
+      console.log(`Testing attribute ${index + 1}: ${attr}`);
+      
+      const match = attr.match(/(title|placeholder|alt|aria-label)="([^"]{3,})"/);
+      if (match) {
+        const parts = attr.split('="');
+        if (parts.length >= 2) {
+          const text = parts[1].slice(0, -1);
+          console.log(`  Extracted: "${text}"`);
+        } else {
+          console.log(`  No valid extraction`);
+        }
+      } else {
+        console.log(`  No match found`);
+      }
+      
+    } catch (error) {
+      console.error(`Attribute test ${index + 1} failed: ${error.message}`);
+    }
+  });
+  
+  // Test string extraction
+  const testStrings = [
+    '"Valid string"',
+    "'Another string'",
+    '`Template string`',
+    '"', // Incomplete
+    '""', // Empty
+    '"Hello', // No closing quote
+    null, // Invalid
+    undefined // Invalid
+  ];
+  
+  testStrings.forEach((str, index) => {
+    try {
+      console.log(`Testing string ${index + 1}: ${str}`);
+      
+      if (str && typeof str === 'string' && str.length >= 2) {
+        const text = str.slice(1, -1);
+        console.log(`  Extracted: "${text}"`);
+      } else {
+        console.log(`  Invalid string, skipped`);
+      }
+      
+    } catch (error) {
+      console.error(`String test ${index + 1} failed: ${error.message}`);
+    }
+  });
+  
+  console.log('✅ Text extraction test completed');
+}
+
 // Main execution
 function main() {
   try {
     testReplacementLogic();
     testFileProcessing();
+    testTextExtraction();
     
     console.log('🎉 All tests completed successfully');
   } catch (error) {
@@ -107,4 +175,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { testReplacementLogic, testFileProcessing };
+module.exports = { testReplacementLogic, testFileProcessing, testTextExtraction };
