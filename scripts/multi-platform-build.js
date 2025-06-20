@@ -117,39 +117,83 @@ class MultiPlatformBuilder {
     const preferredPM = this.projectAnalysis.packageManager || 'npm';
     const packageManagers = [preferredPM, 'pnpm', 'yarn', 'npm'].filter((pm, index, arr) => arr.indexOf(pm) === index);
     
+    console.log(`📋 Checking package manager availability (preferred: ${preferredPM})...`);
+    
     for (const pm of packageManagers) {
       try {
-        execSync(`${pm} --version`, { stdio: 'pipe' });
+        const version = execSync(`${pm} --version`, { stdio: 'pipe', encoding: 'utf8' }).trim();
+        console.log(`   ✅ ${pm} v${version} - available`);
         return pm;
       } catch (error) {
-        console.log(`   ${pm} not available`);
+        console.log(`   ❌ ${pm} - not available (${error.message.split('\n')[0]})`);
       }
     }
     
-    throw new Error('No package manager available (pnpm, yarn, npm)');
+    // Final check - try which command
+    console.log(`🔍 Trying alternative detection methods...`);
+    for (const pm of packageManagers) {
+      try {
+        execSync(`which ${pm}`, { stdio: 'pipe' });
+        console.log(`   ✅ ${pm} found in PATH`);
+        return pm;
+      } catch (error) {
+        console.log(`   ❌ ${pm} not in PATH`);
+      }
+    }
+    
+    throw new Error('No package manager available (pnpm, yarn, npm). Check package manager installation.');
   }
 
   async tryFallbackInstall(fullPath, dir) {
     const fallbackManagers = ['npm', 'yarn', 'pnpm'];
     
+    console.log(`🔄 Attempting fallback installation in ${dir}...`);
+    
+    // Check available package managers first
+    const availableManagers = [];
     for (const pm of fallbackManagers) {
       try {
-        execSync(`${pm} --version`, { stdio: 'pipe' });
-        console.log(`   🔄 Trying fallback: ${pm}`);
+        const version = execSync(`${pm} --version`, { stdio: 'pipe', encoding: 'utf8' }).trim();
+        availableManagers.push({ name: pm, version });
+        console.log(`   ✅ ${pm} v${version} available for fallback`);
+      } catch (error) {
+        console.log(`   ❌ ${pm} not available: ${error.message.split('\n')[0]}`);
+      }
+    }
+    
+    if (availableManagers.length === 0) {
+      console.log(`   ❌ No package managers available for fallback`);
+      return false;
+    }
+    
+    // Try each available manager
+    for (const { name: pm, version } of availableManagers) {
+      try {
+        console.log(`   🔄 Trying fallback: ${pm} v${version}`);
+        
+        // Check if package.json exists
+        const packageJsonPath = path.join(fullPath, 'package.json');
+        if (!fs.existsSync(packageJsonPath)) {
+          console.log(`   ⚠️  No package.json found in ${fullPath}, skipping ${pm}`);
+          continue;
+        }
         
         execSync(`${pm} install`, { 
           cwd: fullPath, 
           stdio: 'pipe',
-          timeout: 300000
+          timeout: 300000,
+          encoding: 'utf8'
         });
         
         console.log(`   ✓ Dependencies installed in ${dir} with ${pm} (fallback)`);
         return true;
+        
       } catch (error) {
-        console.log(`   ❌ ${pm} fallback failed`);
+        console.log(`   ❌ ${pm} fallback failed: ${error.message.split('\n')[0]}`);
       }
     }
     
+    console.log(`   ❌ All fallback attempts failed`);
     return false;
   }
 

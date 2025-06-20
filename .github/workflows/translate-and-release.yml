@@ -57,6 +57,25 @@ jobs:
         uses: pnpm/action-setup@v4
         with:
           version: 8
+          run_install: false
+          
+      - name: Verify package managers
+        run: |
+          echo "📋 Verifying package manager installations..."
+          echo "Node version: $(node --version)"
+          echo "npm version: $(npm --version)"
+          if command -v pnpm &> /dev/null; then
+            echo "pnpm version: $(pnpm --version)"
+          else
+            echo "⚠️  pnpm not found, installing..."
+            npm install -g pnpm@8
+            echo "pnpm version: $(pnpm --version)"
+          fi
+          if command -v yarn &> /dev/null; then
+            echo "yarn version: $(yarn --version)"
+          else
+            echo "ℹ️  yarn not available"
+          fi
           
       - name: Clone source repository
         run: |
