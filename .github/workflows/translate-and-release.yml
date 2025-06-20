@@ -64,6 +64,15 @@ jobs:
           echo "✅ Repository cloned successfully"
           echo "📊 Repository statistics:"
           find . -type f -name "*.vue" -o -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" | wc -l | xargs echo "Total relevant files:"
+          echo ""
+          echo "📁 Directory structure:"
+          find . -type d -name "app*" | head -10
+          echo ""
+          echo "📁 Apps directory:"
+          ls -la apps/ || echo "No apps directory found"
+          echo ""
+          echo "📁 Root directory:"
+          ls -la .
           
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -229,15 +238,58 @@ jobs:
         if: matrix.system-deps != ''
         run: ${{ matrix.system-deps }}
         
+      - name: Find correct app directory
+        id: find-app-dir
+        run: |
+          echo "🔍 Looking for app directory..."
+          
+          # Check various possible locations
+          if [ -d "modrinth-source/apps/app" ]; then
+            APP_DIR="modrinth-source/apps/app"
+          elif [ -d "modrinth-source/apps/app-frontend" ]; then
+            APP_DIR="modrinth-source/apps/app-frontend"
+          elif [ -d "modrinth-source/apps/frontend" ]; then
+            APP_DIR="modrinth-source/apps/frontend"
+          elif [ -d "modrinth-source/app" ]; then
+            APP_DIR="modrinth-source/app"
+          elif [ -d "modrinth-source/frontend" ]; then
+            APP_DIR="modrinth-source/frontend"
+          else
+            echo "❌ Could not find app directory"
+            echo "📁 Available directories in modrinth-source:"
+            find modrinth-source -type d -maxdepth 2 | sort
+            echo "📁 Looking for package.json files:"
+            find modrinth-source -name "package.json" -type f
+            exit 1
+          fi
+          
+          echo "✅ Found app directory: $APP_DIR"
+          echo "app-dir=$APP_DIR" >> $GITHUB_OUTPUT
+          
+          # Check if it has the right structure
+          if [ -f "$APP_DIR/package.json" ]; then
+            echo "✅ package.json found"
+          else
+            echo "❌ No package.json in $APP_DIR"
+            exit 1
+          fi
+          
+          # Check for Tauri
+          if [ -d "$APP_DIR/src-tauri" ]; then
+            echo "✅ Tauri project detected"
+          else
+            echo "⚠️  No src-tauri directory found"
+          fi
+          
       - name: Install Node dependencies
         run: |
-          cd modrinth-source/apps/app
+          cd ${{ steps.find-app-dir.outputs.app-dir }}
           pnpm install
           
       - name: Build application
         run: |
           echo "🏗️ Building for ${{ matrix.platform }}..."
-          cd modrinth-source/apps/app
+          cd ${{ steps.find-app-dir.outputs.app-dir }}
           pnpm run tauri build ${{ matrix.build-args }}
           
       - name: Upload build artifacts
