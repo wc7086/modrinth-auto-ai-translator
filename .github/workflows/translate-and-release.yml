@@ -144,10 +144,15 @@ jobs:
       - name: Check SQLx cache files before upload
         if: ${{ !inputs.dry_run }}
         run: |
-          echo "🔍 Checking for SQLx cache files..."
+          echo "🔍 Checking for SQLx cache files in translation phase..."
+          echo "📁 Current directory: $(pwd)"
+          echo "📁 Directory structure around app-lib:"
+          find modrinth-source -name "app-lib" -type d
+          find modrinth-source -name "packages" -type d
+          echo "🗂️ Looking for .sqlx directories:"
           find modrinth-source -name ".sqlx" -type d
           find modrinth-source -name "sqlx-data.json" -type f
-          echo "📁 SQLx cache directory contents:"
+          echo "📄 SQLx cache files:"
           find modrinth-source -path "*/.sqlx/*" -type f | head -10
           
       - name: Upload translated source code
@@ -156,11 +161,7 @@ jobs:
         with:
           name: translated-source
           path: |
-            modrinth-source/
-            !modrinth-source/node_modules/
-            !modrinth-source/.git/
-            !modrinth-source/target/
-            !modrinth-source/apps/*/target/
+            modrinth-source
           retention-days: 1
           
 
@@ -290,19 +291,49 @@ jobs:
           echo "✅ Selected app directory: $FOUND_DIR"
           
           
-      - name: Check SQLx cache files after download
+      - name: Check directory structure after download
         shell: bash
         run: |
-          echo "🔍 Checking for SQLx cache files in downloaded source..."
+          echo "🔍 Checking directory structure in build phase..."
+          echo "📁 Current directory: $(pwd)"
+          echo "📁 Top-level contents:"
+          ls -la
+          echo "📁 Looking for modrinth-source directory:"
+          find . -name "modrinth-source" -type d
+          echo "📁 Looking for packages directory:"
+          find . -name "packages" -type d
+          echo "📁 Looking for app-lib directory:"
+          find . -name "app-lib" -type d
+          echo "🗂️ Looking for .sqlx directories:"
           find . -name ".sqlx" -type d
-          find . -name "sqlx-data.json" -type f
-          echo "📁 SQLx cache directory contents:"
+          echo "📄 SQLx cache files:"
           find . -path "*/.sqlx/*" -type f | head -10
           
           # Check if .gitignore might be excluding .sqlx files
           if [ -f ".gitignore" ]; then
             echo "📄 .gitignore content related to sqlx:"
             grep -i sqlx .gitignore || echo "No sqlx entries in .gitignore"
+          fi
+          
+          echo "🔧 Checking workspace structure for app-lib dependency:"
+          if [ -f "Cargo.toml" ]; then
+            echo "📄 Root Cargo.toml workspace members:"
+            grep -A 10 "members" Cargo.toml || echo "No workspace members found"
+          fi
+          
+          echo "📁 Expected SQLx cache path from app directory:"
+          EXPECTED_APP_DIR=$(find . -path "*/apps/app" -type d | head -1)
+          if [ -n "$EXPECTED_APP_DIR" ]; then
+            echo "App directory: $EXPECTED_APP_DIR"
+            echo "Expected app-lib path: $(dirname $(dirname $EXPECTED_APP_DIR))/packages/app-lib"
+            EXPECTED_SQLX_PATH="$(dirname $(dirname $EXPECTED_APP_DIR))/packages/app-lib/.sqlx"
+            echo "Expected SQLx path: $EXPECTED_SQLX_PATH"
+            if [ -d "$EXPECTED_SQLX_PATH" ]; then
+              echo "✅ SQLx cache found at expected location"
+              ls -la "$EXPECTED_SQLX_PATH" | head -5
+            else
+              echo "❌ SQLx cache not found at expected location"
+            fi
           fi
           
       - name: Install Node dependencies
