@@ -246,8 +246,15 @@ jobs:
           
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.rust-targets }}
+          
+      - name: Add Rust targets
+        if: matrix.rust-targets != ''
+        shell: bash
+        run: |
+          echo "🦀 Adding Rust target: ${{ matrix.rust-targets }}"
+          rustup target add ${{ matrix.rust-targets }}
+          echo "📋 Installed targets:"
+          rustup target list --installed
         
       - name: Install system dependencies
         if: matrix.system-deps != ''
