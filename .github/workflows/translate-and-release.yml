@@ -238,8 +238,10 @@ jobs:
         if: matrix.system-deps != ''
         run: ${{ matrix.system-deps }}
         
-      - name: Find correct app directory
-        id: find-app-dir
+      - name: Find correct app directory (Linux)
+        if: matrix.platform == 'linux'
+        id: find-app-dir-linux
+        shell: bash
         run: |
           echo "🔍 Looking for app directory..."
           
@@ -281,15 +283,99 @@ jobs:
             echo "⚠️  No src-tauri directory found"
           fi
           
-      - name: Install Node dependencies
+      - name: Find correct app directory (Windows)
+        if: matrix.platform == 'windows'
+        id: find-app-dir-windows
+        shell: pwsh
         run: |
-          cd ${{ steps.find-app-dir.outputs.app-dir }}
+          Write-Host "🔍 Looking for app directory..."
+          
+          $AppDir = ""
+          if (Test-Path "modrinth-source/apps/app") {
+            $AppDir = "modrinth-source/apps/app"
+          } elseif (Test-Path "modrinth-source/apps/app-frontend") {
+            $AppDir = "modrinth-source/apps/app-frontend"
+          } elseif (Test-Path "modrinth-source/apps/frontend") {
+            $AppDir = "modrinth-source/apps/frontend"
+          } elseif (Test-Path "modrinth-source/app") {
+            $AppDir = "modrinth-source/app"
+          } elseif (Test-Path "modrinth-source/frontend") {
+            $AppDir = "modrinth-source/frontend"
+          } else {
+            Write-Host "❌ Could not find app directory"
+            Write-Host "📁 Available directories in modrinth-source:"
+            Get-ChildItem -Path "modrinth-source" -Directory | ForEach-Object { $_.Name }
+            exit 1
+          }
+          
+          Write-Host "✅ Found app directory: $AppDir"
+          echo "app-dir=$AppDir" >> $env:GITHUB_OUTPUT
+          
+          if (Test-Path "$AppDir/package.json") {
+            Write-Host "✅ package.json found"
+          } else {
+            Write-Host "❌ No package.json in $AppDir"
+            exit 1
+          }
+          
+      - name: Find correct app directory (macOS)
+        if: matrix.platform == 'macos-intel' || matrix.platform == 'macos-arm'
+        id: find-app-dir-macos
+        shell: bash
+        run: |
+          echo "🔍 Looking for app directory..."
+          
+          # Check various possible locations
+          if [ -d "modrinth-source/apps/app" ]; then
+            APP_DIR="modrinth-source/apps/app"
+          elif [ -d "modrinth-source/apps/app-frontend" ]; then
+            APP_DIR="modrinth-source/apps/app-frontend"
+          elif [ -d "modrinth-source/apps/frontend" ]; then
+            APP_DIR="modrinth-source/apps/frontend"
+          elif [ -d "modrinth-source/app" ]; then
+            APP_DIR="modrinth-source/app"
+          elif [ -d "modrinth-source/frontend" ]; then
+            APP_DIR="modrinth-source/frontend"
+          else
+            echo "❌ Could not find app directory"
+            echo "📁 Available directories in modrinth-source:"
+            find modrinth-source -type d -maxdepth 2 | sort
+            exit 1
+          fi
+          
+          echo "✅ Found app directory: $APP_DIR"
+          echo "app-dir=$APP_DIR" >> $GITHUB_OUTPUT
+          
+          if [ -f "$APP_DIR/package.json" ]; then
+            echo "✅ package.json found"
+          else
+            echo "❌ No package.json in $APP_DIR"
+            exit 1
+          fi
+          
+      - name: Set app directory variable
+        id: set-app-dir
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            echo "app-dir=${{ steps.find-app-dir-linux.outputs.app-dir }}" >> $GITHUB_OUTPUT
+          elif [ "${{ matrix.platform }}" = "windows" ]; then
+            echo "app-dir=${{ steps.find-app-dir-windows.outputs.app-dir }}" >> $GITHUB_OUTPUT
+          else
+            echo "app-dir=${{ steps.find-app-dir-macos.outputs.app-dir }}" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Install Node dependencies
+        shell: bash
+        run: |
+          cd "${{ steps.set-app-dir.outputs.app-dir }}"
           pnpm install
           
       - name: Build application
+        shell: bash
         run: |
           echo "🏗️ Building for ${{ matrix.platform }}..."
-          cd ${{ steps.find-app-dir.outputs.app-dir }}
+          cd "${{ steps.set-app-dir.outputs.app-dir }}"
           pnpm run tauri build ${{ matrix.build-args }}
           
       - name: Upload build artifacts
