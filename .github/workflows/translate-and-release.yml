@@ -54,7 +54,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            translator-scripts/translation-cache.json
+            translation-cache.json
           key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ github.run_id }}
           restore-keys: |
             translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-
@@ -88,7 +88,8 @@ jobs:
       - name: Extract translatable text
         run: |
           echo "📝 Extracting translatable text from apps/app-frontend..."
-          node translator-scripts/scripts/extract-text.js apps/app-frontend
+          cp translator-scripts/scripts/*.js .
+          node extract-text.js apps/app-frontend
           
       - name: Translate text with AI
         env:
@@ -98,13 +99,13 @@ jobs:
           TARGET_LANGUAGE: ${{ inputs.target_language }}
         run: |
           echo "🤖 Translating text with ${{ inputs.openai_model }}..."
-          cd translator-scripts && node scripts/translate-text.js
+          node translate-text.js
           
       - name: Save translation cache
         uses: actions/cache/save@v4
         with:
           path: |
-            translator-scripts/translation-cache.json
+            translation-cache.json
           key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ github.run_id }}
           
       - name: Upload translation artifacts
@@ -112,17 +113,17 @@ jobs:
         with:
           name: translation-artifacts-${{ github.run_id }}
           path: |
-            translator-scripts/extracted-text.json
-            translator-scripts/translations.json
-            translator-scripts/translation-mapping.json
-            translator-scripts/translation-cache.json
+            extracted-text.json
+            translations.json
+            translation-mapping.json
+            translation-cache.json
           retention-days: 30
           
       - name: Replace text in source code
         if: ${{ !inputs.dry_run }}
         run: |
           echo "🔄 Replacing text in source code..."
-          node translator-scripts/scripts/replace-text.js .
+          node replace-text.js .
           
       - name: Check translation completion
         id: check-translation
