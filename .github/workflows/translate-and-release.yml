@@ -151,6 +151,7 @@ jobs:
             !modrinth-source/node_modules/
             !modrinth-source/.git/
             !modrinth-source/target/
+            !modrinth-source/apps/*/target/
           retention-days: 1
           
 
@@ -286,52 +287,43 @@ jobs:
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           pnpm install
           
-      - name: Build frontend first
+      - name: Build frontend using Turbo
         shell: bash
         run: |
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
-          echo "🔍 Checking for frontend directory..."
+          echo "🏗️ Building frontend using Turbo..."
           
-          # Look for app-frontend or similar
-          FRONTEND_DIR=""
-          if [ -d "../app-frontend" ]; then
-            FRONTEND_DIR="../app-frontend"
-          elif [ -d "app-frontend" ]; then
-            FRONTEND_DIR="app-frontend"
-          elif [ -d "../frontend" ]; then
-            FRONTEND_DIR="../frontend"
-          elif [ -d "frontend" ]; then
-            FRONTEND_DIR="frontend"
+          # Go to workspace root (should be where package.json with turbo is)
+          WORKSPACE_ROOT=""
+          if [ -f "../../package.json" ] && grep -q "turbo" "../../package.json"; then
+            WORKSPACE_ROOT="../.."
+          elif [ -f "../package.json" ] && grep -q "turbo" "../package.json"; then
+            WORKSPACE_ROOT=".."
+          else
+            echo "⚠️ Turbo workspace not found, building frontend manually"
+            # Fallback to manual build
+            if [ -d "../app-frontend" ]; then
+              cd "../app-frontend"
+              pnpm install
+              pnpm build
+              echo "✅ Frontend built manually"
+              return
+            fi
           fi
           
-          if [ -n "$FRONTEND_DIR" ] && [ -d "$FRONTEND_DIR" ]; then
-            echo "✅ Found frontend directory: $FRONTEND_DIR"
-            cd "$FRONTEND_DIR"
+          if [ -n "$WORKSPACE_ROOT" ]; then
+            echo "📁 Found Turbo workspace at: $WORKSPACE_ROOT"
+            cd "$WORKSPACE_ROOT"
             
-            if [ -f "package.json" ]; then
-              echo "📦 Installing frontend dependencies..."
-              pnpm install || npm install || yarn install
-              
-              echo "🏗️ Building frontend..."
-              if grep -q "\"build\"" package.json; then
-                pnpm build || npm run build || yarn build
-              elif grep -q "\"dist\"" package.json; then
-                pnpm dist || npm run dist || yarn dist
-              else
-                echo "⚠️ No build script found, creating empty dist"
-                mkdir -p dist
-                echo "<html><body>Frontend built successfully</body></html>" > dist/index.html
-              fi
-              
-              echo "✅ Frontend build completed"
-              ls -la dist/ || echo "No dist directory created"
-            else
-              echo "⚠️ No package.json in frontend directory"
-            fi
-          else
-            echo "⚠️ No frontend directory found, creating empty dist"
-            mkdir -p ../app-frontend/dist
-            echo "<html><body>Frontend placeholder</body></html>" > ../app-frontend/dist/index.html
+            echo "🚀 Running: pnpm turbo run build --filter=@modrinth/app-frontend"
+            pnpm turbo run build --filter=@modrinth/app-frontend || {
+              echo "⚠️ Turbo build failed, trying manual build"
+              cd apps/app-frontend
+              pnpm install
+              pnpm build
+            }
+            
+            echo "✅ Frontend build completed"
           fi
           
           
