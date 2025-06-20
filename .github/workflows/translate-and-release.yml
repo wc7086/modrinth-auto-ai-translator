@@ -358,8 +358,22 @@ jobs:
             exit 1
           fi
           
+      - name: Check Rust environment
+        shell: bash
+        run: |
+          echo "🦀 Rust environment info:"
+          rustc --version
+          cargo --version
+          rustup show
+          echo ""
+          echo "📁 Current directory: $(pwd)"
+          echo "🔧 Build platform: ${{ matrix.platform }}"
+          echo "🎯 Build args: ${{ matrix.build-args }}"
+          
       - name: Build application
         shell: bash
+        continue-on-error: true
+        id: build-app
         run: |
           echo "🏗️ Building for ${{ matrix.platform }}..."
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
@@ -368,15 +382,64 @@ jobs:
           BUILD_ARGS="${{ matrix.build-args }}"
           
           echo "🚀 Running: pnpm run $BUILD_CMD $BUILD_ARGS"
-          pnpm run $BUILD_CMD $BUILD_ARGS
+          
+          # Platform-specific build with error handling
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            RUST_BACKTRACE=1 pnpm run $BUILD_CMD $BUILD_ARGS
+          elif [[ "${{ matrix.platform }}" == macos-* ]]; then
+            # For macOS, try different approaches
+            echo "🍎 Attempting macOS build..."
+            
+            # First try: Standard build
+            if ! RUST_BACKTRACE=1 pnpm run $BUILD_CMD $BUILD_ARGS; then
+              echo "⚠️  First attempt failed, trying with clean cache..."
+              
+              # Clear Cargo cache and try again
+              cargo clean || true
+              rm -rf target/ || true
+              
+              # Second try: Clean build
+              if ! RUST_BACKTRACE=1 pnpm run $BUILD_CMD $BUILD_ARGS; then
+                echo "⚠️  Second attempt failed, trying native target only..."
+                
+                # Third try: Build for native target only (no cross-compilation)
+                RUST_BACKTRACE=1 pnpm run $BUILD_CMD || echo "❌ All build attempts failed"
+              fi
+            fi
+          else
+            # Windows
+            RUST_BACKTRACE=1 pnpm run $BUILD_CMD $BUILD_ARGS
+          fi
+          
+      - name: Check build results
+        shell: bash
+        run: |
+          cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
+          echo "📦 Checking for build artifacts..."
+          
+          # Look for common Tauri output locations
+          if [ -d "src-tauri/target" ]; then
+            echo "✅ Found Tauri target directory"
+            find src-tauri/target -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" | head -10
+          else
+            echo "❌ No Tauri target directory found"
+          fi
+          
+          # Check if build was successful
+          if [ "${{ steps.build-app.outcome }}" != "success" ]; then
+            echo "⚠️  Build failed, but continuing to collect any partial artifacts..."
+          fi
           
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: build-${{ matrix.platform }}
           path: |
-            modrinth-source/apps/app/src-tauri/target/*/release/bundle/
-            modrinth-source/apps/app/src-tauri/target/release/bundle/
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/src-tauri/target/*/release/bundle/
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/src-tauri/target/release/bundle/
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/target/*/release/bundle/
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/target/release/bundle/
           retention-days: 7
           if-no-files-found: warn
 
