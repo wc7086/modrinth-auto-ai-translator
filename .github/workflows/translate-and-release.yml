@@ -336,76 +336,6 @@ jobs:
           
           
           
-      - name: Setup SQLx cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/sqlx
-            **/target/sqlx/
-            **/.sqlx/
-            **/sqlx-data.json
-          key: ${{ runner.os }}-sqlx-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-sqlx-
-            
-      - name: Install SQLx CLI (cached)
-        shell: bash
-        run: |
-          if ! command -v sqlx &> /dev/null; then
-            echo "📦 Installing SQLx CLI (first time)..."
-            cargo install sqlx-cli --no-default-features --features rustls,sqlite,postgres,mysql --locked
-          else
-            echo "✅ SQLx CLI already installed (from cache)"
-          fi
-          
-      - name: Setup SQLx database for compilation
-        shell: bash
-        run: |
-          cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
-          
-          # Find Rust directory
-          RUST_DIR=""
-          if [ -d "src-tauri" ]; then
-            RUST_DIR="src-tauri"
-          elif [ -d "tauri" ]; then
-            RUST_DIR="tauri"
-          else
-            RUST_DIR=$(find . -name "Cargo.toml" -type f | head -1 | xargs dirname)
-          fi
-          
-          if [ -n "$RUST_DIR" ] && [ -d "$RUST_DIR" ]; then
-            echo "🗄️ Setting up SQLx database for compilation in: $RUST_DIR"
-            cd "$RUST_DIR"
-            
-            # Add SQLx macro optimization to Cargo.toml if not present
-            if ! grep -q "sqlx-macros" Cargo.toml 2>/dev/null; then
-              echo "" >> Cargo.toml
-              echo "# SQLx compilation optimization" >> Cargo.toml  
-              echo "[profile.dev.package.sqlx-macros]" >> Cargo.toml
-              echo "opt-level = 3" >> Cargo.toml
-              echo "✅ Added SQLx macro optimization"
-            else
-              echo "✅ SQLx optimization already present"
-            fi
-            
-            # Create a temporary SQLite database for SQLx compilation
-            echo "📦 Creating temporary database for SQLx..."
-            TEMP_DB="/tmp/sqlx_compile.db"
-            touch "$TEMP_DB"
-            export DATABASE_URL="sqlite://$TEMP_DB"
-            
-            # Run migrations if they exist to set up the database schema
-            if [ -d "migrations" ]; then
-              echo "🔧 Running database migrations..."
-              sqlx database create || echo "Database already exists"
-              sqlx migrate run || echo "Migrations completed or not needed"
-            else
-              echo "⚠️ No migrations directory found, using empty database"
-            fi
-            
-            echo "✅ Database setup completed for SQLx compilation"
-            echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
-          fi
           
       - name: Build application
         shell: bash
@@ -414,8 +344,7 @@ jobs:
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           
           echo "🚀 Running: pnpm build"
-          # Use live database for SQLx compilation (no offline mode)
-          RUST_BACKTRACE=1 pnpm build
+          pnpm build
           
       - name: Check build results
         shell: bash
