@@ -411,14 +411,27 @@ jobs:
         run: |
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           echo "📦 Checking for build artifacts..."
+          echo "🔍 Current directory: $(pwd)"
+          echo "📁 Directory contents:"
+          ls -la
           
-          # Look for common Tauri output locations
-          if [ -d "src-tauri/target" ]; then
-            echo "✅ Found Tauri target directory"
-            find src-tauri/target -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" | head -10
-          else
-            echo "❌ No Tauri target directory found"
-          fi
+          # Look for various possible target locations
+          echo "🔍 Looking for target directories..."
+          find . -name "target" -type d | head -10
+          
+          echo "🔍 Looking for build outputs..."
+          find . -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.rpm" | head -10
+          
+          echo "🔍 Looking for bundle directories..."
+          find . -name "bundle" -type d | head -10
+          
+          # Check common Tauri locations
+          for target_dir in "src-tauri/target" "target" "../target" "../../target"; do
+            if [ -d "$target_dir" ]; then
+              echo "✅ Found target directory: $target_dir"
+              find "$target_dir" -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" | head -5
+            fi
+          done
           
           # Check if build was successful
           if [ "${{ steps.build-app.outcome }}" != "success" ]; then
@@ -431,10 +444,17 @@ jobs:
         with:
           name: build-${{ matrix.platform }}
           path: |
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/src-tauri/target/*/release/bundle/
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/src-tauri/target/release/bundle/
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/target/*/release/bundle/
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/target/release/bundle/
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/src-tauri/target/*/release/bundle/**/*
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/src-tauri/target/release/bundle/**/*
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/target/*/release/bundle/**/*
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/target/release/bundle/**/*
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.app
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.dmg
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.exe
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.msi
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.deb
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.rpm
+            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.AppImage
           retention-days: 7
           if-no-files-found: warn
 
