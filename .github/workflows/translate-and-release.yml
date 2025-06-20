@@ -88,15 +88,13 @@ jobs:
         if: ${{ !inputs.dry_run }}
         run: |
           echo "📦 Installing build dependencies..."
-          cd modrinth-source
-          node ../scripts/install-deps.js
+          node scripts/install-deps.js
           
       - name: Build for multiple platforms
         if: ${{ !inputs.dry_run }}
         run: |
           echo "🏗️ Building for multiple platforms..."
-          cd modrinth-source
-          node ../scripts/multi-platform-build.js
+          node scripts/multi-platform-build.js
           
       - name: Create release
         if: ${{ !inputs.dry_run }}
