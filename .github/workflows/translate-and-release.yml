@@ -19,8 +19,9 @@ on:
         default: '简体中文'
         type: string
       release_tag:
-        description: 'Release Tag (optional, will use latest tag if empty)'
+        description: 'Release Tag (use "latest" for source repo latest tag, or specify custom tag)'
         required: false
+        default: 'latest'
         type: string
       dry_run:
         description: 'Dry Run (analyze and translate only, no replacement/build)'

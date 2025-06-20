@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2024-12-20
+
+### Added
+- 🏷️ **Smart Release Tagging**: Automatically fetch latest tag from Modrinth source repository
+- 📡 **Remote Tag Detection**: Support for `latest` release tag option
+- 🔄 **Fallback Logic**: Multiple strategies for tag determination (local → remote → fallback)
+- 🧪 **Tag Logic Testing**: Test script for validating tag determination logic
+
+### Fixed  
+- 🐛 **Vue Template Extraction**: Fixed regex global flag issue preventing capture group access
+- 🔧 **Release Tag Logic**: Now properly uses Modrinth source repository tags when `latest` specified
+- 📋 **Default Behavior**: Set `latest` as default release tag for better user experience
+
+### Changed
+- 🏷️ **Tag Format**: Generated tags now use format `{source-tag}-zh-cn` (e.g., `v0.9.5-zh-cn`)
+- ⚙️ **Workflow Input**: Release tag now defaults to `latest` instead of empty
+- 📝 **Documentation**: Updated parameter descriptions and usage examples
+
 ## [1.1.0] - 2024-12-20
 
 ### Fixed

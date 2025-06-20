@@ -34,7 +34,7 @@ This project provides a comprehensive GitHub Actions workflow that:
      - OpenAI model (gpt-4o-mini default, supports any OpenAI model)
      - Target language (default: 简体中文)
      - API endpoint (optional custom endpoint)
-     - Release tag (optional, auto-generated if empty)
+     - Release tag (`latest` for source repo latest tag, or custom tag)
      - Dry run (for testing without building/releasing)
 
 ## Workflow Configuration
@@ -46,7 +46,7 @@ This project provides a comprehensive GitHub Actions workflow that:
 | `openai_model` | OpenAI model to use | `gpt-4o-mini` | Yes |
 | `api_endpoint` | API endpoint URL | `https://api.openai.com/v1` | No |
 | `target_language` | Target language for translation | `简体中文` | No |
-| `release_tag` | Release tag to use | Auto-generated | No |
+| `release_tag` | Release tag to use | `latest` (uses source repo latest tag) | No |
 | `dry_run` | Only analyze and translate, don't build | `false` | No |
 
 ### Required Secrets

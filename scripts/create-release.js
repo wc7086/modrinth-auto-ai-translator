@@ -80,32 +80,89 @@ class ReleaseCreator {
   }
 
   async determineReleaseTag() {
-    if (this.releaseTag) {
+    if (this.releaseTag && this.releaseTag !== 'latest') {
       console.log(`🏷️  Using provided release tag: ${this.releaseTag}`);
       return;
     }
     
+    let sourceTag = null;
+    
     try {
-      // Get the latest tag from the repository
-      const latestTag = execSync('git describe --tags --abbrev=0', { 
-        stdio: 'pipe', 
-        encoding: 'utf8' 
-      }).trim();
-      
-      // Increment version (simple increment of patch version)
-      const versionParts = latestTag.replace(/^v/, '').split('.');
-      if (versionParts.length >= 3) {
-        versionParts[2] = (parseInt(versionParts[2]) + 1).toString();
-        this.releaseTag = `v${versionParts.join('.')}`;
-      } else {
-        this.releaseTag = `${latestTag}-translated`;
+      // If user specified 'latest' or no tag provided, get from Modrinth source repo
+      if (this.releaseTag === 'latest' || !this.releaseTag) {
+        console.log(`🔍 Getting latest tag from Modrinth source repository...`);
+        
+        // Check if modrinth-source directory exists (from workflow)
+        const sourceDir = 'modrinth-source';
+        if (fs.existsSync(sourceDir)) {
+          // Get latest tag from source repository
+          sourceTag = execSync('git describe --tags --abbrev=0', { 
+            cwd: sourceDir,
+            stdio: 'pipe', 
+            encoding: 'utf8' 
+          }).trim();
+          console.log(`📋 Found source repository tag: ${sourceTag}`);
+        } else {
+          // Fallback: fetch from remote Modrinth repository
+          console.log(`📡 Fetching latest tag from remote Modrinth repository...`);
+          sourceTag = await this.getLatestTagFromRemote();
+        }
       }
       
-      console.log(`🏷️  Generated release tag: ${this.releaseTag} (based on ${latestTag})`);
+      // If we still don't have a source tag, try current repository
+      if (!sourceTag) {
+        console.log(`🔄 Falling back to current repository tags...`);
+        sourceTag = execSync('git describe --tags --abbrev=0', { 
+          stdio: 'pipe', 
+          encoding: 'utf8' 
+        }).trim();
+      }
+      
+      // Create translated version tag
+      if (sourceTag) {
+        this.releaseTag = `${sourceTag}-zh-cn`;
+        console.log(`🏷️  Generated release tag: ${this.releaseTag} (based on ${sourceTag})`);
+      } else {
+        throw new Error('No tags found');
+      }
+      
     } catch (error) {
-      // If no tags exist, create a default one
-      this.releaseTag = 'v1.0.0-translated';
-      console.log(`🏷️  Created default release tag: ${this.releaseTag}`);
+      console.warn(`⚠️  Could not determine source tag: ${error.message}`);
+      
+      // Create a timestamped tag as fallback
+      const timestamp = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      this.releaseTag = `v1.0.0-translated-${timestamp}`;
+      console.log(`🏷️  Created fallback release tag: ${this.releaseTag}`);
+    }
+  }
+  
+  async getLatestTagFromRemote() {
+    try {
+      // Use git ls-remote to get latest tag from Modrinth repository
+      const output = execSync('git ls-remote --tags --sort=-version:refname https://github.com/modrinth/code.git', {
+        stdio: 'pipe',
+        encoding: 'utf8',
+        timeout: 30000 // 30 second timeout
+      });
+      
+      // Parse the output to get the latest tag
+      const lines = output.trim().split('\n');
+      for (const line of lines) {
+        const match = line.match(/refs\/tags\/(.+)$/);
+        if (match && !match[1].includes('^{}')) {
+          const tag = match[1];
+          // Skip pre-release or beta tags
+          if (!tag.includes('beta') && !tag.includes('alpha') && !tag.includes('rc')) {
+            console.log(`📡 Remote latest tag: ${tag}`);
+            return tag;
+          }
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn(`⚠️  Failed to fetch remote tags: ${error.message}`);
+      return null;
     }
   }
 
