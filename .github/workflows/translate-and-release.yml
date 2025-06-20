@@ -287,44 +287,6 @@ jobs:
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           pnpm install
           
-      - name: Build frontend using Turbo
-        shell: bash
-        run: |
-          cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
-          echo "🏗️ Building frontend using Turbo..."
-          
-          # Go to workspace root (should be where package.json with turbo is)
-          WORKSPACE_ROOT=""
-          if [ -f "../../package.json" ] && grep -q "turbo" "../../package.json"; then
-            WORKSPACE_ROOT="../.."
-          elif [ -f "../package.json" ] && grep -q "turbo" "../package.json"; then
-            WORKSPACE_ROOT=".."
-          else
-            echo "⚠️ Turbo workspace not found, building frontend manually"
-            # Fallback to manual build
-            if [ -d "../app-frontend" ]; then
-              cd "../app-frontend"
-              pnpm install
-              pnpm build
-              echo "✅ Frontend built manually"
-              return
-            fi
-          fi
-          
-          if [ -n "$WORKSPACE_ROOT" ]; then
-            echo "📁 Found Turbo workspace at: $WORKSPACE_ROOT"
-            cd "$WORKSPACE_ROOT"
-            
-            echo "🚀 Running: pnpm turbo run build --filter=@modrinth/app-frontend"
-            pnpm turbo run build --filter=@modrinth/app-frontend || {
-              echo "⚠️ Turbo build failed, trying manual build"
-              cd apps/app-frontend
-              pnpm install
-              pnpm build
-            }
-            
-            echo "✅ Frontend build completed"
-          fi
           
           
           
