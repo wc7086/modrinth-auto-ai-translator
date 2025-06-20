@@ -51,31 +51,44 @@ class TextReplacer {
     const mappingPath = path.join(process.cwd(), 'translation-mapping.json');
     
     if (!fs.existsSync(mappingPath)) {
-      throw new Error('translation-mapping.json not found. Run translate-text.js first.');
+      console.log('⚠️  translation-mapping.json not found. No translations to apply.');
+      return;
     }
     
-    const mappingData = JSON.parse(fs.readFileSync(mappingPath, 'utf8'));
-    
-    if (!mappingData || typeof mappingData !== 'object') {
-      throw new Error('Invalid translation mapping data');
-    }
-    
-    // Convert to Map for efficient lookups with validation
-    let validMappings = 0;
-    Object.entries(mappingData).forEach(([original, translated]) => {
-      // Validate both original and translated are non-empty strings
-      if (original && translated && 
-          typeof original === 'string' && 
-          typeof translated === 'string' &&
-          original.trim().length > 0 && 
-          translated.trim().length > 0 &&
-          original !== translated) {
-        this.replacements.set(original.trim(), translated.trim());
-        validMappings++;
+    try {
+      const mappingData = JSON.parse(fs.readFileSync(mappingPath, 'utf8'));
+      
+      if (!mappingData || typeof mappingData !== 'object') {
+        console.log('⚠️  Invalid translation mapping data. Skipping text replacement.');
+        return;
       }
-    });
-    
-    console.log(`   ✓ Loaded ${validMappings} valid translation mappings`);
+      
+      if (Object.keys(mappingData).length === 0) {
+        console.log('ℹ️  Translation mapping is empty. No translations to apply.');
+        return;
+      }
+      
+      // Convert to Map for efficient lookups with validation
+      let validMappings = 0;
+      Object.entries(mappingData).forEach(([original, translated]) => {
+        // Validate both original and translated are non-empty strings
+        if (original && translated && 
+            typeof original === 'string' && 
+            typeof translated === 'string' &&
+            original.trim().length > 0 && 
+            translated.trim().length > 0 &&
+            original !== translated) {
+          this.replacements.set(original.trim(), translated.trim());
+          validMappings++;
+        }
+      });
+      
+      console.log(`   ✓ Loaded ${validMappings} valid translation mappings`);
+      
+    } catch (error) {
+      console.log(`⚠️  Error reading translation mapping: ${error.message}`);
+      console.log('   Skipping text replacement.');
+    }
   }
 
   async createBackup() {
