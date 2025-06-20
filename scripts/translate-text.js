@@ -1,0 +1,305 @@
+#!/usr/bin/env node
+
+const fs = require('fs');
+const path = require('path');
+
+class AITranslator {
+  constructor() {
+    this.apiKey = process.env.OPENAI_API_KEY;
+    this.model = process.env.OPENAI_MODEL || 'gpt-4-turbo';
+    this.apiEndpoint = process.env.API_ENDPOINT || 'https://api.openai.com/v1';
+    this.targetLanguage = process.env.TARGET_LANGUAGE || '简体中文';
+    
+    if (!this.apiKey) {
+      throw new Error('OPENAI_API_KEY environment variable is required');
+    }
+    
+    this.translations = new Map();
+    this.translationBatches = [];
+    this.processedCount = 0;
+    this.totalCount = 0;
+  }
+
+  async translateTexts() {
+    console.log(`🤖 Starting AI translation with ${this.model}`);
+    console.log(`🎯 Target language: ${this.targetLanguage}`);
+    
+    // Load extracted texts
+    const extractedPath = path.join(process.cwd(), 'extracted-text.json');
+    if (!fs.existsSync(extractedPath)) {
+      throw new Error('extracted-text.json not found. Run extract-text.js first.');
+    }
+    
+    const extractedData = JSON.parse(fs.readFileSync(extractedPath, 'utf8'));
+    const texts = extractedData.texts || [];
+    
+    if (texts.length === 0) {
+      console.log('ℹ️  No texts found to translate');
+      return;
+    }
+    
+    console.log(`📝 Found ${texts.length} texts to translate`);
+    this.totalCount = texts.length;
+    
+    // Group texts into batches for efficient translation
+    const batches = this.createBatches(texts, 10); // 10 texts per batch
+    
+    console.log(`📦 Created ${batches.length} translation batches`);
+    
+    // Translate each batch
+    for (let i = 0; i < batches.length; i++) {
+      console.log(`🔄 Processing batch ${i + 1}/${batches.length}...`);
+      await this.translateBatch(batches[i], i);
+      
+      // Add delay to respect rate limits
+      if (i < batches.length - 1) {
+        await this.delay(1000); // 1 second delay between batches
+      }
+    }
+    
+    // Save translations
+    await this.saveTranslations(extractedData);
+    
+    console.log(`✅ Translation completed: ${this.processedCount}/${this.totalCount} texts`);
+  }
+
+  createBatches(texts, batchSize) {
+    const batches = [];
+    for (let i = 0; i < texts.length; i += batchSize) {
+      batches.push(texts.slice(i, i + batchSize));
+    }
+    return batches;
+  }
+
+  async translateBatch(batch, batchIndex) {
+    const prompt = this.createBatchPrompt(batch);
+    
+    try {
+      const response = await this.callOpenAI(prompt);
+      const translations = this.parseBatchResponse(response, batch);
+      
+      // Store translations
+      for (let i = 0; i < batch.length; i++) {
+        const originalText = batch[i];
+        const translatedText = translations[i] || originalText.text; // Fallback to original
+        
+        this.translations.set(originalText.text, {
+          original: originalText.text,
+          translated: translatedText,
+          context: originalText.context,
+          files: originalText.files || [originalText.file]
+        });
+        
+        this.processedCount++;
+      }
+      
+      console.log(`   ✓ Batch ${batchIndex + 1} completed (${batch.length} texts)`);
+      
+    } catch (error) {
+      console.error(`   ❌ Batch ${batchIndex + 1} failed: ${error.message}`);
+      
+      // Fallback: try individual translations for this batch
+      await this.translateBatchIndividually(batch);
+    }
+  }
+
+  async translateBatchIndividually(batch) {
+    console.log(`   🔄 Retrying batch individually...`);
+    
+    for (const text of batch) {
+      try {
+        const translated = await this.translateSingle(text.text);
+        this.translations.set(text.text, {
+          original: text.text,
+          translated,
+          context: text.context,
+          files: text.files || [text.file]
+        });
+        this.processedCount++;
+        
+        // Delay between individual requests
+        await this.delay(500);
+        
+      } catch (error) {
+        console.warn(`   ⚠️  Failed to translate: "${text.text.substring(0, 50)}..."`);
+        
+        // Store original text as fallback
+        this.translations.set(text.text, {
+          original: text.text,
+          translated: text.text,
+          context: text.context,
+          files: text.files || [text.file],
+          error: true
+        });
+        this.processedCount++;
+      }
+    }
+  }
+
+  createBatchPrompt(batch) {
+    const textList = batch.map((item, index) => 
+      `${index + 1}. "${item.text}"`
+    ).join('\n');
+    
+    return `You are a professional software localization expert. Translate the following UI text strings from English to ${this.targetLanguage}.
+
+IMPORTANT INSTRUCTIONS:
+- Maintain the original meaning and context
+- Keep technical terms and proper nouns in English when appropriate
+- Preserve any placeholders, variables, or special formatting (like {}, [], etc.)
+- Make translations natural and user-friendly for ${this.targetLanguage} speakers
+- If a string is already in ${this.targetLanguage} or doesn't need translation, return it unchanged
+- Do not translate URLs, file paths, technical identifiers, or code-related strings
+
+Context: These are UI strings from a desktop application interface.
+
+Text strings to translate:
+${textList}
+
+Please respond with ONLY the translated strings in the same numbered format:
+1. [translated text 1]
+2. [translated text 2]
+...
+
+Do not include any explanation or additional text.`;
+  }
+
+  async translateSingle(text) {
+    const prompt = `Translate this UI text from English to ${this.targetLanguage}. 
+Keep technical terms, URLs, and code unchanged. Make it natural for ${this.targetLanguage} users.
+
+Text: "${text}"
+
+Translation:`;
+
+    const response = await this.callOpenAI(prompt);
+    return response.trim().replace(/^["']|["']$/g, ''); // Remove surrounding quotes
+  }
+
+  async callOpenAI(prompt) {
+    const response = await fetch(`${this.apiEndpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a professional software localization expert. Provide accurate, contextual translations for UI strings.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 2000
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(`OpenAI API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+    }
+    
+    const data = await response.json();
+    
+    if (!data.choices || data.choices.length === 0) {
+      throw new Error('No translation received from API');
+    }
+    
+    return data.choices[0].message.content;
+  }
+
+  parseBatchResponse(response, originalBatch) {
+    const lines = response.split('\n').filter(line => line.trim());
+    const translations = [];
+    
+    for (const line of lines) {
+      // Match numbered format: "1. translated text"
+      const match = line.match(/^\d+\.\s*(.+)$/);
+      if (match) {
+        translations.push(match[1].trim().replace(/^["']|["']$/g, ''));
+      }
+    }
+    
+    // Ensure we have the same number of translations as original texts
+    while (translations.length < originalBatch.length) {
+      const missingIndex = translations.length;
+      translations.push(originalBatch[missingIndex].text); // Fallback to original
+    }
+    
+    return translations;
+  }
+
+  async saveTranslations(originalData) {
+    const translationData = {
+      metadata: {
+        ...originalData.metadata,
+        translatedAt: new Date().toISOString(),
+        model: this.model,
+        targetLanguage: this.targetLanguage,
+        apiEndpoint: this.apiEndpoint,
+        totalTexts: this.totalCount,
+        successfulTranslations: this.processedCount,
+        failedTranslations: this.totalCount - this.processedCount
+      },
+      translations: Array.from(this.translations.values())
+    };
+    
+    const outputPath = path.join(process.cwd(), 'translations.json');
+    fs.writeFileSync(outputPath, JSON.stringify(translationData, null, 2));
+    
+    console.log(`💾 Translations saved to: ${outputPath}`);
+    
+    // Also create a simple mapping file for replacement script
+    const mappingData = {};
+    this.translations.forEach((value, key) => {
+      if (value.translated !== value.original) {
+        mappingData[key] = value.translated;
+      }
+    });
+    
+    const mappingPath = path.join(process.cwd(), 'translation-mapping.json');
+    fs.writeFileSync(mappingPath, JSON.stringify(mappingData, null, 2));
+    
+    console.log(`🗺️  Translation mapping saved to: ${mappingPath}`);
+    
+    // Generate summary
+    const changed = Object.keys(mappingData).length;
+    const unchanged = this.translations.size - changed;
+    
+    console.log(`📊 Translation Summary:`);
+    console.log(`   - Total processed: ${this.processedCount}`);
+    console.log(`   - Translated: ${changed}`);
+    console.log(`   - Unchanged: ${unchanged}`);
+    console.log(`   - Model used: ${this.model}`);
+    console.log(`   - Target language: ${this.targetLanguage}`);
+  }
+
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+}
+
+// Main execution
+async function main() {
+  try {
+    const translator = new AITranslator();
+    await translator.translateTexts();
+    
+    console.log('✅ AI translation completed successfully');
+  } catch (error) {
+    console.error('❌ AI translation failed:', error.message);
+    process.exit(1);
+  }
+}
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = AITranslator;

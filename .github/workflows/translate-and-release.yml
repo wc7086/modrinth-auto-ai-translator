@@ -1,0 +1,128 @@
+name: 'Auto Translate and Release'
+
+on:
+  workflow_dispatch:
+    inputs:
+      openai_model:
+        description: 'OpenAI Model'
+        required: true
+        default: 'gpt-4-turbo'
+        type: choice
+        options:
+          - 'gpt-3.5-turbo'
+          - 'gpt-4'
+          - 'gpt-4-turbo'
+          - 'gpt-4o'
+      api_endpoint:
+        description: 'API Endpoint (optional, defaults to OpenAI official)'
+        required: false
+        default: 'https://api.openai.com/v1'
+        type: string
+      target_language:
+        description: 'Target Language'
+        required: true
+        default: '简体中文'
+        type: string
+      release_tag:
+        description: 'Release Tag (optional, will use latest tag if empty)'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry Run (analyze and translate only, no replacement/build)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  translate-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Clone source repository
+        run: |
+          echo "📥 Cloning Modrinth source repository..."
+          git clone --recurse-submodules https://github.com/modrinth/code.git modrinth-source
+          cd modrinth-source
+          echo "✅ Repository cloned successfully"
+          echo "📊 Repository statistics:"
+          find . -type f -name "*.vue" -o -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" | wc -l | xargs echo "Total relevant files:"
+          
+      - name: Analyze project structure
+        run: |
+          echo "🔍 Analyzing project structure..."
+          node scripts/analyze-project.js modrinth-source
+          
+      - name: Extract translatable text
+        run: |
+          echo "📝 Extracting translatable text from apps/app-frontend..."
+          node scripts/extract-text.js modrinth-source/apps/app-frontend
+          
+      - name: Translate text with AI
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ inputs.openai_model }}
+          API_ENDPOINT: ${{ inputs.api_endpoint }}
+          TARGET_LANGUAGE: ${{ inputs.target_language }}
+        run: |
+          echo "🤖 Translating text with ${{ inputs.openai_model }}..."
+          node scripts/translate-text.js
+          
+      - name: Replace text in source code
+        if: ${{ !inputs.dry_run }}
+        run: |
+          echo "🔄 Replacing text in source code..."
+          cp -r modrinth-source modrinth-source-backup
+          node scripts/replace-text.js modrinth-source
+          
+      - name: Install Rust (for Tauri builds)
+        if: ${{ !inputs.dry_run }}
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu,x86_64-pc-windows-gnu,x86_64-apple-darwin,aarch64-apple-darwin
+          
+      - name: Install build dependencies
+        if: ${{ !inputs.dry_run }}
+        run: |
+          echo "📦 Installing build dependencies..."
+          cd modrinth-source
+          node ../scripts/install-deps.js
+          
+      - name: Build for multiple platforms
+        if: ${{ !inputs.dry_run }}
+        run: |
+          echo "🏗️ Building for multiple platforms..."
+          cd modrinth-source
+          node ../scripts/multi-platform-build.js
+          
+      - name: Create release
+        if: ${{ !inputs.dry_run }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          OPENAI_MODEL: ${{ inputs.openai_model }}
+          TARGET_LANGUAGE: ${{ inputs.target_language }}
+        run: |
+          echo "🚀 Creating release..."
+          node scripts/create-release.js
+          
+      - name: Generate summary report
+        run: |
+          echo "📋 Generating summary report..."
+          node scripts/generate-report.js
+          
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: translation-reports
+          path: |
+            translation-report.json
+            build-report.json
+            extracted-text.json
