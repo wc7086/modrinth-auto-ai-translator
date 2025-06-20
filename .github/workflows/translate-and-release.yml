@@ -358,7 +358,7 @@ jobs:
             echo "✅ SQLx CLI already installed (from cache)"
           fi
           
-      - name: Optimize SQLx compilation
+      - name: Setup SQLx database for compilation
         shell: bash
         run: |
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
@@ -374,7 +374,7 @@ jobs:
           fi
           
           if [ -n "$RUST_DIR" ] && [ -d "$RUST_DIR" ]; then
-            echo "🚀 Optimizing SQLx compilation in: $RUST_DIR"
+            echo "🗄️ Setting up SQLx database for compilation in: $RUST_DIR"
             cd "$RUST_DIR"
             
             # Add SQLx macro optimization to Cargo.toml if not present
@@ -388,12 +388,23 @@ jobs:
               echo "✅ SQLx optimization already present"
             fi
             
-            # Check for existing .sqlx cache
-            if [ -d ".sqlx" ] || [ -f "sqlx-data.json" ]; then
-              echo "✅ Found existing SQLx cache files"
+            # Create a temporary SQLite database for SQLx compilation
+            echo "📦 Creating temporary database for SQLx..."
+            TEMP_DB="/tmp/sqlx_compile.db"
+            touch "$TEMP_DB"
+            export DATABASE_URL="sqlite://$TEMP_DB"
+            
+            # Run migrations if they exist to set up the database schema
+            if [ -d "migrations" ]; then
+              echo "🔧 Running database migrations..."
+              sqlx database create || echo "Database already exists"
+              sqlx migrate run || echo "Migrations completed or not needed"
             else
-              echo "⚠️ No SQLx cache found, will use SQLX_OFFLINE=true"
+              echo "⚠️ No migrations directory found, using empty database"
             fi
+            
+            echo "✅ Database setup completed for SQLx compilation"
+            echo "DATABASE_URL=$DATABASE_URL" >> $GITHUB_ENV
           fi
           
       - name: Build application
@@ -403,8 +414,8 @@ jobs:
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           
           echo "🚀 Running: pnpm build"
-          # Use SQLx offline mode for faster compilation
-          SQLX_OFFLINE=true RUST_BACKTRACE=1 pnpm build
+          # Use live database for SQLx compilation (no offline mode)
+          RUST_BACKTRACE=1 pnpm build
           
       - name: Check build results
         shell: bash
