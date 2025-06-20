@@ -128,56 +128,31 @@ jobs:
           cp -r modrinth-source modrinth-source-backup
           node scripts/replace-text.js modrinth-source
           
-      - name: Install Rust (for Tauri builds)
+      - name: Upload translated source code
         if: ${{ !inputs.dry_run }}
-        uses: dtolnay/rust-toolchain@stable
-        
-      - name: Install system dependencies
+        uses: actions/upload-artifact@v4
+        with:
+          name: translated-source-${{ github.run_id }}
+          path: |
+            modrinth-source/
+            !modrinth-source/node_modules/
+            !modrinth-source/.git/
+            !modrinth-source/target/
+          retention-days: 1
+          
+      - name: Trigger platform builds
         if: ${{ !inputs.dry_run }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
-          
-      - name: Install build dependencies
-        if: ${{ !inputs.dry_run }}
-        run: |
-          echo "📦 Installing build dependencies..."
-          cd modrinth-source/apps/app
-          pnpm install
-          
-      - name: Build for Linux
-        if: ${{ !inputs.dry_run }}
-        run: |
-          echo "🏗️ Building for Linux x64..."
-          cd modrinth-source/apps/app
-          pnpm run tauri build
-          
-      - name: Create release
-        if: ${{ !inputs.dry_run }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          OPENAI_MODEL: ${{ inputs.openai_model }}
-          TARGET_LANGUAGE: ${{ inputs.target_language }}
-        run: |
-          echo "🚀 Creating release..."
-          # Simple release creation without complex artifact collection
-          FINAL_TAG="${{ inputs.release_tag }}-$(echo '${{ inputs.target_language }}' | tr '[:upper:]' '[:lower:]' | sed 's/简体中文/zh-cn/g' | sed 's/繁体中文/zh-tw/g' | sed 's/english/en/g')"
-          if [ "${{ inputs.release_tag }}" = "latest" ]; then
-            SOURCE_TAG=$(git ls-remote --tags https://github.com/modrinth/code.git | grep -E 'refs/tags/v[0-9]+' | sort -V | tail -1 | sed 's/.*refs\/tags\///')
-            FINAL_TAG="${SOURCE_TAG}-zh-cn"
-          fi
-          
-          # Find build artifacts
-          ARTIFACTS_PATH="modrinth-source/apps/app/src-tauri/target/release"
-          if [ -d "$ARTIFACTS_PATH" ]; then
-            echo "📦 Found build artifacts in $ARTIFACTS_PATH"
-            ls -la "$ARTIFACTS_PATH"
-          else
-            echo "⚠️  Build artifacts not found"
-          fi
-          
-          echo "Release would be created with tag: $FINAL_TAG"
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          event-type: build-platforms
+          client-payload: |
+            {
+              "run_id": "${{ github.run_id }}",
+              "release_tag": "${{ inputs.release_tag }}",
+              "target_language": "${{ inputs.target_language }}",
+              "openai_model": "${{ inputs.openai_model }}"
+            }
           
       - name: Generate summary report
         run: |
