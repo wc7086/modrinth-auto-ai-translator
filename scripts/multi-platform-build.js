@@ -58,6 +58,10 @@ class MultiPlatformBuilder {
     console.log(`📦 Installing dependencies...`);
     
     try {
+      // Verify package manager availability and get fallback options
+      const packageManager = await this.getAvailablePackageManager();
+      console.log(`📋 Using package manager: ${packageManager}`);
+      
       // Install dependencies in all relevant directories
       const packageDirs = new Set();
       
@@ -80,20 +84,25 @@ class MultiPlatformBuilder {
         console.log(`   Installing in: ${dir}`);
         
         try {
-          const cmd = `${this.projectAnalysis.packageManager} install`;
+          const cmd = `${packageManager} install`;
           execSync(cmd, { 
             cwd: fullPath, 
             stdio: 'pipe',
             timeout: 300000 // 5 minutes timeout
           });
-          console.log(`   ✓ Dependencies installed in ${dir}`);
+          console.log(`   ✓ Dependencies installed in ${dir} with ${packageManager}`);
         } catch (error) {
           console.warn(`   ⚠️  Failed to install dependencies in ${dir}: ${error.message}`);
-          this.reportData.errors.push({
-            step: 'dependency-install',
-            directory: dir,
-            error: error.message
-          });
+          
+          // Try fallback package managers
+          const installed = await this.tryFallbackInstall(fullPath, dir);
+          if (!installed) {
+            this.reportData.errors.push({
+              step: 'dependency-install',
+              directory: dir,
+              error: error.message
+            });
+          }
         }
       }
       
@@ -101,6 +110,47 @@ class MultiPlatformBuilder {
       console.error(`❌ Dependency installation failed: ${error.message}`);
       throw error;
     }
+  }
+
+  async getAvailablePackageManager() {
+    // Preferred order based on project analysis
+    const preferredPM = this.projectAnalysis.packageManager || 'npm';
+    const packageManagers = [preferredPM, 'pnpm', 'yarn', 'npm'].filter((pm, index, arr) => arr.indexOf(pm) === index);
+    
+    for (const pm of packageManagers) {
+      try {
+        execSync(`${pm} --version`, { stdio: 'pipe' });
+        return pm;
+      } catch (error) {
+        console.log(`   ${pm} not available`);
+      }
+    }
+    
+    throw new Error('No package manager available (pnpm, yarn, npm)');
+  }
+
+  async tryFallbackInstall(fullPath, dir) {
+    const fallbackManagers = ['npm', 'yarn', 'pnpm'];
+    
+    for (const pm of fallbackManagers) {
+      try {
+        execSync(`${pm} --version`, { stdio: 'pipe' });
+        console.log(`   🔄 Trying fallback: ${pm}`);
+        
+        execSync(`${pm} install`, { 
+          cwd: fullPath, 
+          stdio: 'pipe',
+          timeout: 300000
+        });
+        
+        console.log(`   ✓ Dependencies installed in ${dir} with ${pm} (fallback)`);
+        return true;
+      } catch (error) {
+        console.log(`   ❌ ${pm} fallback failed`);
+      }
+    }
+    
+    return false;
   }
 
   determineBuildStrategy() {

@@ -43,6 +43,26 @@ async function installDependencies() {
   }
 }
 
+// Get package manager priority based on lock files
+async function getPackageManagerPriority(projectPath) {
+  const lockFiles = [
+    { file: 'pnpm-lock.yaml', manager: 'pnpm' },
+    { file: 'yarn.lock', manager: 'yarn' },
+    { file: 'package-lock.json', manager: 'npm' }
+  ];
+  
+  // Check for lock files to determine preferred package manager
+  for (const { file, manager } of lockFiles) {
+    if (fs.existsSync(path.join(projectPath, file))) {
+      console.log(`   Found ${file}, preferring ${manager}`);
+      return [manager, 'npm', 'yarn', 'pnpm'].filter((pm, index, arr) => arr.indexOf(pm) === index);
+    }
+  }
+  
+  // Default order if no lock files found
+  return ['npm', 'yarn', 'pnpm'];
+}
+
 // Fallback installation method that doesn't require project analysis
 async function fallbackInstallation() {
   console.log('🔄 Attempting fallback dependency installation...');
@@ -71,8 +91,8 @@ async function fallbackInstallation() {
         console.log(`📦 Installing dependencies in: ${dir}`);
         
         try {
-          // Try different package managers
-          const packageManagers = ['pnpm', 'yarn', 'npm'];
+          // Try different package managers with smart ordering
+          const packageManagers = await getPackageManagerPriority(fullPath);
           let installed = false;
           
           for (const pm of packageManagers) {
@@ -93,7 +113,7 @@ async function fallbackInstallation() {
               break;
               
             } catch (pmError) {
-              // Try next package manager
+              console.log(`   ${pm} not available or failed: ${pmError.message.split('\n')[0]}`);
               continue;
             }
           }
@@ -130,4 +150,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { installDependencies, fallbackInstallation };
+module.exports = { installDependencies, fallbackInstallation, getPackageManagerPriority };
