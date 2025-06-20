@@ -56,9 +56,19 @@ jobs:
         with:
           node-version: '20'
           
+      - name: Clone source repository
+        run: |
+          echo "📥 Cloning Modrinth source repository..."
+          git clone --recurse-submodules https://github.com/modrinth/code.git modrinth-source
+          cd modrinth-source
+          echo "✅ Repository cloned successfully"
+          echo "📊 Repository statistics:"
+          find . -type f -name "*.vue" -o -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" | wc -l | xargs echo "Total relevant files:"
+          
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
+          package_json_file: 'modrinth-source/package.json'
           run_install: false
           
       - name: Verify package managers
@@ -72,15 +82,6 @@ jobs:
           else
             echo "ℹ️  yarn not available"
           fi
-          
-      - name: Clone source repository
-        run: |
-          echo "📥 Cloning Modrinth source repository..."
-          git clone --recurse-submodules https://github.com/modrinth/code.git modrinth-source
-          cd modrinth-source
-          echo "✅ Repository cloned successfully"
-          echo "📊 Repository statistics:"
-          find . -type f -name "*.vue" -o -name "*.ts" -o -name "*.js" -o -name "*.tsx" -o -name "*.jsx" | wc -l | xargs echo "Total relevant files:"
           
       - name: Extract translatable text
         run: |
