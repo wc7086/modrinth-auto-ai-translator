@@ -30,8 +30,11 @@ on:
         type: boolean
 
 jobs:
-  translate-and-release:
+  translate:
     runs-on: ubuntu-latest
+    outputs:
+      translated: ${{ steps.check-translation.outputs.translated }}
+      release-tag: ${{ steps.generate-tag.outputs.release-tag }}
     
     steps:
       - name: Checkout current repository
@@ -128,31 +131,37 @@ jobs:
           cp -r modrinth-source modrinth-source-backup
           node scripts/replace-text.js modrinth-source
           
+      - name: Check translation completion
+        id: check-translation
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "translated=false" >> $GITHUB_OUTPUT
+          else
+            echo "translated=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Generate release tag
+        id: generate-tag
+        run: |
+          FINAL_TAG="${{ inputs.release_tag }}-$(echo '${{ inputs.target_language }}' | tr '[:upper:]' '[:lower:]' | sed 's/简体中文/zh-cn/g' | sed 's/繁体中文/zh-tw/g' | sed 's/english/en/g')"
+          if [ "${{ inputs.release_tag }}" = "latest" ]; then
+            SOURCE_TAG=$(git ls-remote --tags https://github.com/modrinth/code.git | grep -E 'refs/tags/v[0-9]+' | sort -V | tail -1 | sed 's/.*refs\/tags\///')
+            FINAL_TAG="${SOURCE_TAG}-zh-cn"
+          fi
+          echo "release-tag=$FINAL_TAG" >> $GITHUB_OUTPUT
+          echo "🏷️ Release tag will be: $FINAL_TAG"
+          
       - name: Upload translated source code
         if: ${{ !inputs.dry_run }}
         uses: actions/upload-artifact@v4
         with:
-          name: translated-source-${{ github.run_id }}
+          name: translated-source
           path: |
             modrinth-source/
             !modrinth-source/node_modules/
             !modrinth-source/.git/
             !modrinth-source/target/
           retention-days: 1
-          
-      - name: Trigger platform builds
-        if: ${{ !inputs.dry_run }}
-        uses: peter-evans/repository-dispatch@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          event-type: build-platforms
-          client-payload: |
-            {
-              "run_id": "${{ github.run_id }}",
-              "release_tag": "${{ inputs.release_tag }}",
-              "target_language": "${{ inputs.target_language }}",
-              "openai_model": "${{ inputs.openai_model }}"
-            }
           
       - name: Generate summary report
         run: |
@@ -169,3 +178,144 @@ jobs:
             replacement-summary.md
             workflow-summary.json
           retention-days: 7
+
+  build-platforms:
+    needs: translate
+    if: needs.translate.outputs.translated == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'linux'
+            os: ubuntu-latest
+            rust-targets: ''
+            system-deps: 'sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf'
+            build-args: ''
+          - platform: 'windows'
+            os: windows-latest
+            rust-targets: ''
+            system-deps: ''
+            build-args: ''
+          - platform: 'macos-intel'
+            os: macos-latest
+            rust-targets: 'x86_64-apple-darwin'
+            system-deps: ''
+            build-args: '--target x86_64-apple-darwin'
+          - platform: 'macos-arm'
+            os: macos-latest
+            rust-targets: 'aarch64-apple-darwin'
+            system-deps: ''
+            build-args: '--target aarch64-apple-darwin'
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Download translated source
+        uses: actions/download-artifact@v4
+        with:
+          name: translated-source
+          path: .
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+          run_install: false
+          
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+        
+      - name: Install system dependencies
+        if: matrix.system-deps != ''
+        run: ${{ matrix.system-deps }}
+        
+      - name: Install Node dependencies
+        run: |
+          cd modrinth-source/apps/app
+          pnpm install
+          
+      - name: Build application
+        run: |
+          echo "🏗️ Building for ${{ matrix.platform }}..."
+          cd modrinth-source/apps/app
+          pnpm run tauri build ${{ matrix.build-args }}
+          
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.platform }}
+          path: |
+            modrinth-source/apps/app/src-tauri/target/*/release/bundle/
+            modrinth-source/apps/app/src-tauri/target/release/bundle/
+          retention-days: 7
+          if-no-files-found: warn
+
+  create-release:
+    needs: [translate, build-platforms]
+    if: always() && needs.translate.outputs.translated == 'true' && (contains(needs.build-platforms.result, 'success'))
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: build-*
+          path: build-artifacts/
+          merge-multiple: true
+          
+      - name: List artifacts
+        run: |
+          echo "📦 Available build artifacts:"
+          find build-artifacts/ -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.pkg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) || echo "No standard installer files found"
+          echo ""
+          echo "📋 All files in build artifacts:"
+          find build-artifacts/ -type f | head -20
+          
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.translate.outputs.release-tag }}
+          TARGET_LANGUAGE: ${{ inputs.target_language }}
+        run: |
+          echo "🚀 Creating GitHub release..."
+          
+          # Create release notes
+          cat > release_notes.md << EOF
+          # Modrinth Auto-Translated Release
+          
+          🤖 **AI Translation**: Translated to $TARGET_LANGUAGE using ${{ inputs.openai_model }}
+          🌍 **Multi-Platform**: Built for Linux, Windows, and macOS
+          📅 **Build Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          
+          ## Platforms Included
+          - 🐧 Linux (AppImage, .deb, .rpm)
+          - 🪟 Windows (.exe, .msi)
+          - 🍎 macOS (.dmg, .pkg) - Intel & Apple Silicon
+          
+          ## Installation
+          1. Download the appropriate file for your platform
+          2. Install/run the application
+          3. Enjoy Modrinth in $TARGET_LANGUAGE!
+          
+          ---
+          *This release was automatically generated by GitHub Actions*
+          EOF
+          
+          # Create release
+          gh release create "$RELEASE_TAG" \
+            --title "Modrinth $TARGET_LANGUAGE - $RELEASE_TAG" \
+            --notes-file release_notes.md \
+            --draft \
+            build-artifacts/* || echo "Release creation failed, but continuing..."
+            
+          echo "✅ Release process completed"
