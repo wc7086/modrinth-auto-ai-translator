@@ -288,46 +288,64 @@ jobs:
           
           
           
-      - name: Setup SQLx offline mode
+      - name: Setup SQLx cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/sqlx
+            **/target/sqlx/
+            **/.sqlx/
+            **/sqlx-data.json
+          key: ${{ runner.os }}-sqlx-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-sqlx-
+            
+      - name: Install SQLx CLI (cached)
+        shell: bash
+        run: |
+          if ! command -v sqlx &> /dev/null; then
+            echo "📦 Installing SQLx CLI (first time)..."
+            cargo install sqlx-cli --no-default-features --features rustls,sqlite,postgres,mysql --locked
+          else
+            echo "✅ SQLx CLI already installed (from cache)"
+          fi
+          
+      - name: Optimize SQLx compilation
         shell: bash
         run: |
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
-          echo "🗄️ Setting up SQLx offline compilation..."
           
-          # Find src-tauri or similar Rust directories
+          # Find Rust directory
           RUST_DIR=""
           if [ -d "src-tauri" ]; then
             RUST_DIR="src-tauri"
           elif [ -d "tauri" ]; then
             RUST_DIR="tauri"
           else
-            # Look for Cargo.toml files
             RUST_DIR=$(find . -name "Cargo.toml" -type f | head -1 | xargs dirname)
           fi
           
           if [ -n "$RUST_DIR" ] && [ -d "$RUST_DIR" ]; then
-            echo "📁 Found Rust directory: $RUST_DIR"
+            echo "🚀 Optimizing SQLx compilation in: $RUST_DIR"
             cd "$RUST_DIR"
             
-            # Install SQLx CLI if not present
-            if ! command -v sqlx &> /dev/null; then
-              echo "📦 Installing SQLx CLI..."
-              cargo install sqlx-cli --no-default-features --features sqlite,postgres,mysql
+            # Add SQLx macro optimization to Cargo.toml if not present
+            if ! grep -q "sqlx-macros" Cargo.toml 2>/dev/null; then
+              echo "" >> Cargo.toml
+              echo "# SQLx compilation optimization" >> Cargo.toml  
+              echo "[profile.dev.package.sqlx-macros]" >> Cargo.toml
+              echo "opt-level = 3" >> Cargo.toml
+              echo "✅ Added SQLx macro optimization"
+            else
+              echo "✅ SQLx optimization already present"
             fi
             
-            # Try to prepare SQLx cache with a test database
-            echo "🔧 Preparing SQLx cache..."
-            # Create a temporary in-memory database for cache generation
-            export DATABASE_URL="sqlite::memory:"
-            
-            # Try to generate SQLx cache
-            cargo sqlx prepare --workspace || echo "⚠️ SQLx prepare failed, continuing with SQLX_OFFLINE=true"
-            
-            # List any generated cache files
-            echo "📄 SQLx cache files:"
-            find . -name "sqlx-data.json" -o -name ".sqlx" -type d 2>/dev/null || echo "No SQLx cache files found"
-          else
-            echo "⚠️ No Rust directory found, skipping SQLx setup"
+            # Check for existing .sqlx cache
+            if [ -d ".sqlx" ] || [ -f "sqlx-data.json" ]; then
+              echo "✅ Found existing SQLx cache files"
+            else
+              echo "⚠️ No SQLx cache found, will use SQLX_OFFLINE=true"
+            fi
           fi
           
       - name: Build application
@@ -337,7 +355,7 @@ jobs:
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           
           echo "🚀 Running: pnpm build"
-          # Set SQLX_OFFLINE to use pre-compiled query metadata
+          # Use SQLx offline mode for faster compilation
           SQLX_OFFLINE=true RUST_BACKTRACE=1 pnpm build
           
       - name: Check build results
