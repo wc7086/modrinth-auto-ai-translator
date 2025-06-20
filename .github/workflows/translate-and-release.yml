@@ -160,14 +160,22 @@ jobs:
           echo "📄 SQLx cache files:"
           find . -path "*/.sqlx/*" -type f | head -10
           
+          echo "📄 Checking .gitignore for SQLx exclusions:"
+          if [ -f ".gitignore" ]; then
+            grep -n "sqlx\|\.sqlx" .gitignore || echo "No SQLx entries in .gitignore"
+          fi
+          
+          echo "📄 Forcing include .sqlx files in git:"
+          git add -f packages/app-lib/.sqlx/ || echo "Failed to force add .sqlx files"
+          echo "📊 Git status after force add:"
+          git status --porcelain | grep "sqlx" || echo "No sqlx files in git status"
+          
       - name: Upload translated source code
         if: ${{ !inputs.dry_run }}
         uses: actions/upload-artifact@v4
         with:
           name: translated-source
-          path: |
-            .
-            !translator-scripts
+          path: .
           retention-days: 1
           
 
@@ -334,6 +342,7 @@ jobs:
         run: |
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           pnpm install
+          
           
           
           
