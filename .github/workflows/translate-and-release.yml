@@ -37,14 +37,24 @@ jobs:
       release-tag: ${{ steps.generate-tag.outputs.release-tag }}
     
     steps:
-      - name: Checkout current repository
+      - name: Checkout Modrinth source repository
         uses: actions/checkout@v4
+        with:
+          repository: modrinth/code
+          path: .
+          submodules: recursive
+          token: ${{ github.token }}
         
+      - name: Checkout translation scripts
+        uses: actions/checkout@v4
+        with:
+          path: translator-scripts
+          
       - name: Restore translation cache
         uses: actions/cache@v4
         with:
           path: |
-            translation-cache.json
+            translator-scripts/translation-cache.json
           key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ github.run_id }}
           restore-keys: |
             translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-
@@ -56,16 +66,10 @@ jobs:
         with:
           node-version: '20'
           
-      - name: Clone source repository
-        run: |
-          echo "📥 Cloning Modrinth source repository..."
-          git clone --recurse-submodules https://github.com/modrinth/code.git modrinth-source
-          echo "✅ Repository cloned successfully"
-          
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          package_json_file: 'modrinth-source/package.json'
+          package_json_file: 'package.json'
           run_install: false
           
       - name: Get pnpm store directory
@@ -84,7 +88,7 @@ jobs:
       - name: Extract translatable text
         run: |
           echo "📝 Extracting translatable text from apps/app-frontend..."
-          node scripts/extract-text.js modrinth-source/apps/app-frontend
+          node translator-scripts/scripts/extract-text.js apps/app-frontend
           
       - name: Translate text with AI
         env:
@@ -94,13 +98,13 @@ jobs:
           TARGET_LANGUAGE: ${{ inputs.target_language }}
         run: |
           echo "🤖 Translating text with ${{ inputs.openai_model }}..."
-          node scripts/translate-text.js
+          cd translator-scripts && node scripts/translate-text.js
           
       - name: Save translation cache
         uses: actions/cache/save@v4
         with:
           path: |
-            translation-cache.json
+            translator-scripts/translation-cache.json
           key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ github.run_id }}
           
       - name: Upload translation artifacts
@@ -108,18 +112,17 @@ jobs:
         with:
           name: translation-artifacts-${{ github.run_id }}
           path: |
-            extracted-text.json
-            translations.json
-            translation-mapping.json
-            translation-cache.json
+            translator-scripts/extracted-text.json
+            translator-scripts/translations.json
+            translator-scripts/translation-mapping.json
+            translator-scripts/translation-cache.json
           retention-days: 30
           
       - name: Replace text in source code
         if: ${{ !inputs.dry_run }}
         run: |
           echo "🔄 Replacing text in source code..."
-          cp -r modrinth-source modrinth-source-backup
-          node scripts/replace-text.js modrinth-source
+          node translator-scripts/scripts/replace-text.js .
           
       - name: Check translation completion
         id: check-translation
@@ -135,7 +138,7 @@ jobs:
         run: |
           FINAL_TAG="${{ inputs.release_tag }}-$(echo '${{ inputs.target_language }}' | tr '[:upper:]' '[:lower:]' | sed 's/简体中文/zh-cn/g' | sed 's/繁体中文/zh-tw/g' | sed 's/english/en/g')"
           if [ "${{ inputs.release_tag }}" = "latest" ]; then
-            SOURCE_TAG=$(git ls-remote --tags https://github.com/modrinth/code.git | grep -E 'refs/tags/v[0-9]+' | sort -V | tail -1 | sed 's/.*refs\/tags\///')
+            SOURCE_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.9.5")
             FINAL_TAG="${SOURCE_TAG}-zh-cn"
           fi
           echo "release-tag=$FINAL_TAG" >> $GITHUB_OUTPUT
@@ -144,16 +147,17 @@ jobs:
       - name: Check SQLx cache files before upload
         if: ${{ !inputs.dry_run }}
         run: |
-          echo "🔍 Checking for SQLx cache files in translation phase..."
+          echo "🔍 Checking for SQLx cache files in current directory..."
           echo "📁 Current directory: $(pwd)"
-          echo "📁 Directory structure around app-lib:"
-          find modrinth-source -name "app-lib" -type d
-          find modrinth-source -name "packages" -type d
+          echo "📁 Looking for packages directory:"
+          find . -name "packages" -type d
+          echo "📁 Looking for app-lib directory:"
+          find . -name "app-lib" -type d
           echo "🗂️ Looking for .sqlx directories:"
-          find modrinth-source -name ".sqlx" -type d
-          find modrinth-source -name "sqlx-data.json" -type f
+          find . -name ".sqlx" -type d
+          find . -name "sqlx-data.json" -type f
           echo "📄 SQLx cache files:"
-          find modrinth-source -path "*/.sqlx/*" -type f | head -10
+          find . -path "*/.sqlx/*" -type f | head -10
           
       - name: Upload translated source code
         if: ${{ !inputs.dry_run }}
@@ -161,7 +165,8 @@ jobs:
         with:
           name: translated-source
           path: |
-            modrinth-source
+            .
+            !translator-scripts
           retention-days: 1
           
 
@@ -298,8 +303,6 @@ jobs:
           echo "📁 Current directory: $(pwd)"
           echo "📁 Top-level contents:"
           ls -la
-          echo "📁 Looking for modrinth-source directory:"
-          find . -name "modrinth-source" -type d
           echo "📁 Looking for packages directory:"
           find . -name "packages" -type d
           echo "📁 Looking for app-lib directory:"
@@ -309,31 +312,20 @@ jobs:
           echo "📄 SQLx cache files:"
           find . -path "*/.sqlx/*" -type f | head -10
           
-          # Check if .gitignore might be excluding .sqlx files
-          if [ -f ".gitignore" ]; then
-            echo "📄 .gitignore content related to sqlx:"
-            grep -i sqlx .gitignore || echo "No sqlx entries in .gitignore"
-          fi
-          
           echo "🔧 Checking workspace structure for app-lib dependency:"
           if [ -f "Cargo.toml" ]; then
             echo "📄 Root Cargo.toml workspace members:"
             grep -A 10 "members" Cargo.toml || echo "No workspace members found"
           fi
           
-          echo "📁 Expected SQLx cache path from app directory:"
-          EXPECTED_APP_DIR=$(find . -path "*/apps/app" -type d | head -1)
-          if [ -n "$EXPECTED_APP_DIR" ]; then
-            echo "App directory: $EXPECTED_APP_DIR"
-            echo "Expected app-lib path: $(dirname $(dirname $EXPECTED_APP_DIR))/packages/app-lib"
-            EXPECTED_SQLX_PATH="$(dirname $(dirname $EXPECTED_APP_DIR))/packages/app-lib/.sqlx"
-            echo "Expected SQLx path: $EXPECTED_SQLX_PATH"
-            if [ -d "$EXPECTED_SQLX_PATH" ]; then
-              echo "✅ SQLx cache found at expected location"
-              ls -la "$EXPECTED_SQLX_PATH" | head -5
-            else
-              echo "❌ SQLx cache not found at expected location"
-            fi
+          echo "📁 SQLx cache status:"
+          SQLX_PATH="./packages/app-lib/.sqlx"
+          if [ -d "$SQLX_PATH" ]; then
+            echo "✅ SQLx cache found at: $SQLX_PATH"
+            echo "📄 SQLx cache files count: $(find $SQLX_PATH -name "*.json" | wc -l)"
+            ls -la "$SQLX_PATH" | head -5
+          else
+            echo "❌ SQLx cache not found at: $SQLX_PATH"
           fi
           
       - name: Install Node dependencies
