@@ -18,6 +18,105 @@ class AITranslator {
     this.translationBatches = [];
     this.processedCount = 0;
     this.totalCount = 0;
+    this.cacheHits = 0;
+    this.apiCalls = 0;
+    
+    // Cache configuration
+    this.cacheFile = path.join(process.cwd(), 'translation-cache.json');
+    this.cache = new Map();
+    
+    // Load existing cache
+    this.loadCache();
+  }
+
+  loadCache() {
+    try {
+      if (fs.existsSync(this.cacheFile)) {
+        const cacheData = JSON.parse(fs.readFileSync(this.cacheFile, 'utf8'));
+        
+        // Validate cache structure
+        if (cacheData.version && cacheData.cache && typeof cacheData.cache === 'object') {
+          // Load cache entries with model and language matching
+          Object.entries(cacheData.cache).forEach(([key, entry]) => {
+            // Only load cache entries that match current model and target language
+            if (entry.model === this.model && entry.targetLanguage === this.targetLanguage) {
+              this.cache.set(key, entry);
+            }
+          });
+          
+          console.log(`📋 Loaded ${this.cache.size} cached translations (model: ${this.model}, language: ${this.targetLanguage})`);
+        } else {
+          console.log(`🔄 Cache file format outdated, starting fresh`);
+        }
+      } else {
+        console.log(`📝 No translation cache found, starting fresh`);
+      }
+    } catch (error) {
+      console.warn(`⚠️  Error loading cache: ${error.message}`);
+      this.cache.clear();
+    }
+  }
+
+  saveCache() {
+    try {
+      // Load existing cache file to preserve other model/language combinations
+      let existingCache = {};
+      if (fs.existsSync(this.cacheFile)) {
+        try {
+          const cacheData = JSON.parse(fs.readFileSync(this.cacheFile, 'utf8'));
+          if (cacheData.cache) {
+            existingCache = cacheData.cache;
+          }
+        } catch (error) {
+          console.warn(`⚠️  Error reading existing cache: ${error.message}`);
+        }
+      }
+      
+      // Add current cache entries
+      this.cache.forEach((entry, key) => {
+        existingCache[key] = entry;
+      });
+      
+      const cacheData = {
+        version: '1.0',
+        lastUpdated: new Date().toISOString(),
+        cache: existingCache
+      };
+      
+      fs.writeFileSync(this.cacheFile, JSON.stringify(cacheData, null, 2));
+      console.log(`💾 Translation cache saved: ${this.cache.size} entries`);
+    } catch (error) {
+      console.warn(`⚠️  Error saving cache: ${error.message}`);
+    }
+  }
+
+  getCacheKey(text, context = '') {
+    // Create a cache key that includes text, model, target language, and context
+    return `${text}|${this.model}|${this.targetLanguage}|${context}`;
+  }
+
+  getCachedTranslation(text, context = '') {
+    const key = this.getCacheKey(text, context);
+    const cached = this.cache.get(key);
+    
+    if (cached && cached.translated) {
+      this.cacheHits++;
+      return cached.translated;
+    }
+    
+    return null;
+  }
+
+  setCachedTranslation(text, translated, context = '') {
+    const key = this.getCacheKey(text, context);
+    this.cache.set(key, {
+      original: text,
+      translated,
+      context,
+      model: this.model,
+      targetLanguage: this.targetLanguage,
+      createdAt: new Date().toISOString()
+    });
   }
 
   async translateTexts() {
@@ -41,26 +140,72 @@ class AITranslator {
     console.log(`📝 Found ${texts.length} texts to translate`);
     this.totalCount = texts.length;
     
-    // Group texts into batches for efficient translation
-    const batches = this.createBatches(texts, 10); // 10 texts per batch
+    // Check cache for existing translations
+    const { cachedTexts, uncachedTexts } = this.separateCachedTexts(texts);
     
-    console.log(`📦 Created ${batches.length} translation batches`);
+    console.log(`📋 Cache status:`);
+    console.log(`   - Cached: ${cachedTexts.length} texts`);
+    console.log(`   - Need translation: ${uncachedTexts.length} texts`);
     
-    // Translate each batch
-    for (let i = 0; i < batches.length; i++) {
-      console.log(`🔄 Processing batch ${i + 1}/${batches.length}...`);
-      await this.translateBatch(batches[i], i);
+    // Process cached texts
+    cachedTexts.forEach(text => {
+      const cached = this.getCachedTranslation(text.text, text.context);
+      this.translations.set(text.text, {
+        original: text.text,
+        translated: cached,
+        context: text.context,
+        files: text.files || [text.file],
+        fromCache: true
+      });
+      this.processedCount++;
+    });
+    
+    // Only translate uncached texts
+    if (uncachedTexts.length > 0) {
+      // Group uncached texts into batches for efficient translation
+      const batches = this.createBatches(uncachedTexts, 10); // 10 texts per batch
       
-      // Add delay to respect rate limits
-      if (i < batches.length - 1) {
-        await this.delay(1000); // 1 second delay between batches
+      console.log(`📦 Created ${batches.length} translation batches for uncached texts`);
+      
+      // Translate each batch
+      for (let i = 0; i < batches.length; i++) {
+        console.log(`🔄 Processing batch ${i + 1}/${batches.length}...`);
+        await this.translateBatch(batches[i], i);
+        
+        // Add delay to respect rate limits
+        if (i < batches.length - 1) {
+          await this.delay(1000); // 1 second delay between batches
+        }
       }
+    } else {
+      console.log(`🎉 All texts found in cache, no API calls needed!`);
     }
+    
+    // Save updated cache
+    this.saveCache();
     
     // Save translations
     await this.saveTranslations(extractedData);
     
     console.log(`✅ Translation completed: ${this.processedCount}/${this.totalCount} texts`);
+    console.log(`📊 Cache efficiency: ${this.cacheHits}/${this.totalCount} hits (${Math.round(this.cacheHits/this.totalCount*100)}%)`);
+    console.log(`🔌 API calls made: ${this.apiCalls}`);
+  }
+
+  separateCachedTexts(texts) {
+    const cachedTexts = [];
+    const uncachedTexts = [];
+    
+    texts.forEach(text => {
+      const cached = this.getCachedTranslation(text.text, text.context);
+      if (cached) {
+        cachedTexts.push(text);
+      } else {
+        uncachedTexts.push(text);
+      }
+    });
+    
+    return { cachedTexts, uncachedTexts };
   }
 
   createBatches(texts, batchSize) {
@@ -76,18 +221,24 @@ class AITranslator {
     
     try {
       const response = await this.callOpenAI(prompt);
+      this.apiCalls++; // Count API call
       const translations = this.parseBatchResponse(response, batch);
       
-      // Store translations
+      // Store translations and cache them
       for (let i = 0; i < batch.length; i++) {
         const originalText = batch[i];
         const translatedText = translations[i] || originalText.text; // Fallback to original
         
+        // Save to cache
+        this.setCachedTranslation(originalText.text, translatedText, originalText.context);
+        
+        // Store in current translations
         this.translations.set(originalText.text, {
           original: originalText.text,
           translated: translatedText,
           context: originalText.context,
-          files: originalText.files || [originalText.file]
+          files: originalText.files || [originalText.file],
+          fromCache: false
         });
         
         this.processedCount++;
@@ -108,17 +259,32 @@ class AITranslator {
     
     for (const text of batch) {
       try {
-        const translated = await this.translateSingle(text.text);
+        // Check cache first
+        let translated = this.getCachedTranslation(text.text, text.context);
+        let fromCache = true;
+        
+        if (!translated) {
+          translated = await this.translateSingle(text.text);
+          this.apiCalls++; // Count API call
+          fromCache = false;
+          
+          // Save to cache
+          this.setCachedTranslation(text.text, translated, text.context);
+        }
+        
         this.translations.set(text.text, {
           original: text.text,
           translated,
           context: text.context,
-          files: text.files || [text.file]
+          files: text.files || [text.file],
+          fromCache
         });
         this.processedCount++;
         
-        // Delay between individual requests
-        await this.delay(500);
+        // Delay between individual requests (only for API calls)
+        if (!fromCache) {
+          await this.delay(500);
+        }
         
       } catch (error) {
         console.warn(`   ⚠️  Failed to translate: "${text.text.substring(0, 50)}..."`);
@@ -129,7 +295,8 @@ class AITranslator {
           translated: text.text,
           context: text.context,
           files: text.files || [text.file],
-          error: true
+          error: true,
+          fromCache: false
         });
         this.processedCount++;
       }

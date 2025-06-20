@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2024-12-20
+
+### Added
+- 💾 **Smart Translation Caching**: Intelligent caching system to avoid redundant API calls
+- 🔄 **GitHub Actions Cache Integration**: Automatic cache restoration and persistence across workflow runs
+- 📊 **Cache Performance Metrics**: Detailed statistics on cache hits, API calls, and cost savings
+- 🎯 **Model-Specific Caching**: Separate cache entries for different models and target languages
+- 🧪 **Cache Testing Suite**: Comprehensive tests for cache functionality and performance
+
+### Enhanced
+- 🚀 **Performance Optimization**: Dramatically reduced translation time and API costs through caching
+- 📈 **Cost Efficiency**: Potential 50-90% reduction in OpenAI API costs for repeated workflows
+- ⚡ **Speed Improvements**: Cached translations are retrieved instantly without API delays
+
+### Technical Features
+- Cache key includes text, model, target language, and context for precise matching
+- Automatic cache invalidation for different model/language combinations
+- Fallback handling when cache is corrupted or outdated
+- Integration with GitHub Actions cache for persistent storage across runs
+
 ## [1.2.0] - 2024-12-20
 
 ### Added

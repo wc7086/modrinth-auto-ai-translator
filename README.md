@@ -20,7 +20,8 @@ This project provides a comprehensive GitHub Actions workflow that:
 - 🌐 **Multi-Platform Builds** - Supports Tauri, Electron, and web applications
 - 📊 **Detailed Reporting** - Comprehensive logs and reports for each step
 - 🛡️ **Safe Operations** - Creates backups before making changes
-- ⚙️ **Configurable** - Supports custom API endpoints, models, and languages
+- ⚙️ **Configurable** - Supports custom API endpoints, models, and languages  
+- 💾 **Smart Caching** - Caches translations to avoid redundant API calls and reduce costs
 
 ## Quick Start
 
@@ -73,9 +74,11 @@ This project provides a comprehensive GitHub Actions workflow that:
 
 ### 3. AI Translation
 - Processes text in batches for efficiency
+- **Smart Caching**: Automatically caches translations to avoid redundant API calls
 - Provides context to ensure accurate translation
 - Preserves formatting and special characters
 - Handles rate limiting and error recovery
+- **Cost Optimization**: Significantly reduces API costs through intelligent caching
 
 ### 4. Text Replacement
 - Creates backup before making changes
