@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0] - 2024-12-20
+
+### Added
+- 🚀 **Immediate Cache Saving**: Cache is saved immediately after translation completion
+- 📦 **Early Artifact Upload**: Translation artifacts uploaded right after translation step
+- 🛡️ **Failure-Resistant Caching**: Preserves translation work even if subsequent steps fail
+- 🔄 **Optimized Workflow**: Separated translation and build artifacts with different retention policies
+
+### Enhanced
+- ⚡ **Improved Resilience**: Build failures no longer cause loss of translation cache
+- 💰 **Better Cost Control**: Expensive translations are preserved regardless of build outcome
+- 📊 **Artifact Organization**: Clear separation between translation (30 days) and build (7 days) artifacts
+- 🔧 **Development Efficiency**: Faster iteration cycles with preserved translation state
+
+### Technical Improvements
+- Cache saving moved from end of workflow to immediately after translation
+- Translation artifacts uploaded with `if: always()` condition
+- Enhanced cache key strategy with run ID for better isolation
+- Optimized artifact retention policies based on importance and usage patterns
+
 ## [1.3.0] - 2024-12-20
 
 ### Added

@@ -42,7 +42,7 @@ jobs:
         with:
           path: |
             translation-cache.json
-          key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-v1
+          key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ github.run_id }}
           restore-keys: |
             translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-
             translation-cache-${{ inputs.openai_model }}-
@@ -87,6 +87,26 @@ jobs:
           echo "🤖 Translating text with ${{ inputs.openai_model }}..."
           node scripts/translate-text.js
           
+      - name: Save translation cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: |
+            translation-cache.json
+          key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ github.run_id }}
+          
+      - name: Upload translation artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: translation-artifacts-${{ github.run_id }}
+          path: |
+            extracted-text.json
+            translations.json
+            translation-mapping.json
+            translation-cache.json
+          retention-days: 30
+          
       - name: Replace text in source code
         if: ${{ !inputs.dry_run }}
         run: |
@@ -128,13 +148,15 @@ jobs:
           echo "📋 Generating summary report..."
           node scripts/generate-report.js
           
-      - name: Upload artifacts
+      - name: Upload build artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: translation-reports
+          name: build-reports-${{ github.run_id }}
           path: |
-            translation-report.json
             build-report.json
-            extracted-text.json
-            translation-cache.json
-            translation-mapping.json
+            replacement-report.json
+            replacement-summary.md
+            project-analysis.json
+            workflow-summary.json
+          retention-days: 7

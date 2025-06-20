@@ -75,6 +75,7 @@ This project provides a comprehensive GitHub Actions workflow that:
 ### 3. AI Translation
 - Processes text in batches for efficiency
 - **Smart Caching**: Automatically caches translations to avoid redundant API calls
+- **Immediate Cache Saving**: Preserves translations even if build fails
 - Provides context to ensure accurate translation
 - Preserves formatting and special characters
 - Handles rate limiting and error recovery
