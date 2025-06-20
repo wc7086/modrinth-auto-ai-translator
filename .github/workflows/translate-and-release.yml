@@ -219,6 +219,21 @@ jobs:
           name: translated-source
           path: .
           
+      - name: Check downloaded structure
+        shell: bash
+        run: |
+          echo "📁 Current directory contents:"
+          ls -la
+          echo ""
+          echo "🔍 Looking for modrinth-source or similar:"
+          find . -name "*modrinth*" -type d 2>/dev/null || echo "No modrinth directories found"
+          echo ""
+          echo "🔍 Looking for apps directories:"
+          find . -name "apps" -type d 2>/dev/null || echo "No apps directories found"
+          echo ""
+          echo "📄 Looking for package.json files:"
+          find . -name "package.json" -type f 2>/dev/null | head -5
+          
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -245,23 +260,33 @@ jobs:
         run: |
           echo "🔍 Looking for app directory..."
           
-          # Check various possible locations
-          if [ -d "modrinth-source/apps/app" ]; then
+          # Check various possible locations (with and without modrinth-source prefix)
+          if [ -d "apps/app" ]; then
+            APP_DIR="apps/app"
+          elif [ -d "modrinth-source/apps/app" ]; then
             APP_DIR="modrinth-source/apps/app"
+          elif [ -d "apps/app-frontend" ]; then
+            APP_DIR="apps/app-frontend"
           elif [ -d "modrinth-source/apps/app-frontend" ]; then
             APP_DIR="modrinth-source/apps/app-frontend"
+          elif [ -d "apps/frontend" ]; then
+            APP_DIR="apps/frontend"
           elif [ -d "modrinth-source/apps/frontend" ]; then
             APP_DIR="modrinth-source/apps/frontend"
+          elif [ -d "app" ]; then
+            APP_DIR="app"
           elif [ -d "modrinth-source/app" ]; then
             APP_DIR="modrinth-source/app"
+          elif [ -d "frontend" ]; then
+            APP_DIR="frontend"
           elif [ -d "modrinth-source/frontend" ]; then
             APP_DIR="modrinth-source/frontend"
           else
             echo "❌ Could not find app directory"
-            echo "📁 Available directories in modrinth-source:"
-            find modrinth-source -type d -maxdepth 2 | sort
+            echo "📁 Available directories:"
+            find . -type d -maxdepth 3 | sort
             echo "📁 Looking for package.json files:"
-            find modrinth-source -name "package.json" -type f
+            find . -name "package.json" -type f
             exit 1
           fi
           
@@ -291,20 +316,32 @@ jobs:
           Write-Host "🔍 Looking for app directory..."
           
           $AppDir = ""
-          if (Test-Path "modrinth-source/apps/app") {
+          if (Test-Path "apps/app") {
+            $AppDir = "apps/app"
+          } elseif (Test-Path "modrinth-source/apps/app") {
             $AppDir = "modrinth-source/apps/app"
+          } elseif (Test-Path "apps/app-frontend") {
+            $AppDir = "apps/app-frontend"
           } elseif (Test-Path "modrinth-source/apps/app-frontend") {
             $AppDir = "modrinth-source/apps/app-frontend"
+          } elseif (Test-Path "apps/frontend") {
+            $AppDir = "apps/frontend"
           } elseif (Test-Path "modrinth-source/apps/frontend") {
             $AppDir = "modrinth-source/apps/frontend"
+          } elseif (Test-Path "app") {
+            $AppDir = "app"
           } elseif (Test-Path "modrinth-source/app") {
             $AppDir = "modrinth-source/app"
+          } elseif (Test-Path "frontend") {
+            $AppDir = "frontend"
           } elseif (Test-Path "modrinth-source/frontend") {
             $AppDir = "modrinth-source/frontend"
           } else {
             Write-Host "❌ Could not find app directory"
-            Write-Host "📁 Available directories in modrinth-source:"
-            Get-ChildItem -Path "modrinth-source" -Directory | ForEach-Object { $_.Name }
+            Write-Host "📁 Available directories:"
+            Get-ChildItem -Directory -Recurse -Depth 2 | Select-Object FullName
+            Write-Host "📁 Looking for package.json files:"
+            Get-ChildItem -Name "package.json" -Recurse | Select-Object FullName
             exit 1
           }
           
@@ -325,21 +362,33 @@ jobs:
         run: |
           echo "🔍 Looking for app directory..."
           
-          # Check various possible locations
-          if [ -d "modrinth-source/apps/app" ]; then
+          # Check various possible locations (with and without modrinth-source prefix)
+          if [ -d "apps/app" ]; then
+            APP_DIR="apps/app"
+          elif [ -d "modrinth-source/apps/app" ]; then
             APP_DIR="modrinth-source/apps/app"
+          elif [ -d "apps/app-frontend" ]; then
+            APP_DIR="apps/app-frontend"
           elif [ -d "modrinth-source/apps/app-frontend" ]; then
             APP_DIR="modrinth-source/apps/app-frontend"
+          elif [ -d "apps/frontend" ]; then
+            APP_DIR="apps/frontend"
           elif [ -d "modrinth-source/apps/frontend" ]; then
             APP_DIR="modrinth-source/apps/frontend"
+          elif [ -d "app" ]; then
+            APP_DIR="app"
           elif [ -d "modrinth-source/app" ]; then
             APP_DIR="modrinth-source/app"
+          elif [ -d "frontend" ]; then
+            APP_DIR="frontend"
           elif [ -d "modrinth-source/frontend" ]; then
             APP_DIR="modrinth-source/frontend"
           else
             echo "❌ Could not find app directory"
-            echo "📁 Available directories in modrinth-source:"
-            find modrinth-source -type d -maxdepth 2 | sort
+            echo "📁 Available directories:"
+            find . -type d -maxdepth 3 | sort
+            echo "📁 Looking for package.json files:"
+            find . -name "package.json" -type f
             exit 1
           fi
           
