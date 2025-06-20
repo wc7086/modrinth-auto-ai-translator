@@ -364,7 +364,8 @@ jobs:
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           
           echo "🚀 Running: pnpm build"
-          RUST_BACKTRACE=1 pnpm build
+          # Set SQLX_OFFLINE to use pre-compiled query metadata
+          SQLX_OFFLINE=true RUST_BACKTRACE=1 pnpm build
           
       - name: Check build results
         shell: bash
