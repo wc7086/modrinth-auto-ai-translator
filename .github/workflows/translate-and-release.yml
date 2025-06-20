@@ -141,6 +141,15 @@ jobs:
           echo "release-tag=$FINAL_TAG" >> $GITHUB_OUTPUT
           echo "🏷️ Release tag will be: $FINAL_TAG"
           
+      - name: Check SQLx cache files before upload
+        if: ${{ !inputs.dry_run }}
+        run: |
+          echo "🔍 Checking for SQLx cache files..."
+          find modrinth-source -name ".sqlx" -type d
+          find modrinth-source -name "sqlx-data.json" -type f
+          echo "📁 SQLx cache directory contents:"
+          find modrinth-source -path "*/.sqlx/*" -type f | head -10
+          
       - name: Upload translated source code
         if: ${{ !inputs.dry_run }}
         uses: actions/upload-artifact@v4
@@ -280,6 +289,21 @@ jobs:
           echo "app-dir=$FOUND_DIR" >> $GITHUB_OUTPUT
           echo "✅ Selected app directory: $FOUND_DIR"
           
+          
+      - name: Check SQLx cache files after download
+        shell: bash
+        run: |
+          echo "🔍 Checking for SQLx cache files in downloaded source..."
+          find . -name ".sqlx" -type d
+          find . -name "sqlx-data.json" -type f
+          echo "📁 SQLx cache directory contents:"
+          find . -path "*/.sqlx/*" -type f | head -10
+          
+          # Check if .gitignore might be excluding .sqlx files
+          if [ -f ".gitignore" ]; then
+            echo "📄 .gitignore content related to sqlx:"
+            grep -i sqlx .gitignore || echo "No sqlx entries in .gitignore"
+          fi
           
       - name: Install Node dependencies
         shell: bash
