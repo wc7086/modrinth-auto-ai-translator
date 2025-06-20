@@ -191,19 +191,13 @@ jobs:
         include:
           - platform: 'linux'
             os: ubuntu-latest
-            rust-targets: ''
             system-deps: 'sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf'
-            build-args: ''
           - platform: 'windows'
             os: windows-latest
-            rust-targets: ''
             system-deps: ''
-            build-args: ''
           - platform: 'macos'
             os: macos-latest
-            rust-targets: ''
             system-deps: ''
-            build-args: ''
     
     runs-on: ${{ matrix.os }}
     
@@ -241,15 +235,6 @@ jobs:
           
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-          
-      - name: Add Rust targets
-        if: matrix.rust-targets != ''
-        shell: bash
-        run: |
-          echo "🦀 Adding Rust target: ${{ matrix.rust-targets }}"
-          rustup target add ${{ matrix.rust-targets }}
-          echo "📋 Installed targets:"
-          rustup target list --installed
         
       - name: Install system dependencies
         if: matrix.system-deps != ''
@@ -318,36 +303,13 @@ jobs:
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           pnpm install
           
-      - name: Detect build commands
-        id: detect-build
+      - name: Show package.json scripts
         shell: bash
         run: |
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
-          echo "🔍 Detecting available build commands..."
-          
-          # Check package.json for available scripts
+          echo "📄 Available npm scripts in package.json:"
           if [ -f "package.json" ]; then
-            echo "📄 Available npm scripts:"
             jq -r '.scripts | to_entries[] | "\(.key): \(.value)"' package.json || echo "Failed to parse scripts"
-            
-            # Determine build command
-            if jq -e '.scripts.tauri' package.json >/dev/null; then
-              BUILD_CMD="tauri"
-            elif jq -e '.scripts["tauri:build"]' package.json >/dev/null; then
-              BUILD_CMD="tauri:build"
-            elif jq -e '.scripts.build' package.json >/dev/null; then
-              BUILD_CMD="build"
-            elif jq -e '.scripts["build:tauri"]' package.json >/dev/null; then
-              BUILD_CMD="build:tauri"
-            else
-              echo "❌ No suitable build command found"
-              echo "Available scripts:"
-              jq -r '.scripts | keys[]' package.json || echo "No scripts found"
-              exit 1
-            fi
-            
-            echo "✅ Selected build command: $BUILD_CMD"
-            echo "build-cmd=$BUILD_CMD" >> $GITHUB_OUTPUT
           else
             echo "❌ No package.json found"
             exit 1
@@ -359,11 +321,7 @@ jobs:
           echo "🦀 Rust environment info:"
           rustc --version
           cargo --version
-          rustup show
-          echo ""
-          echo "📁 Current directory: $(pwd)"
           echo "🔧 Build platform: ${{ matrix.platform }}"
-          echo "🎯 Build args: ${{ matrix.build-args }}"
           
       - name: Build application
         shell: bash
@@ -373,38 +331,8 @@ jobs:
           echo "🏗️ Building for ${{ matrix.platform }}..."
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           
-          BUILD_CMD="${{ steps.detect-build.outputs.build-cmd }}"
-          BUILD_ARGS="${{ matrix.build-args }}"
-          
-          echo "🚀 Running: pnpm run $BUILD_CMD $BUILD_ARGS"
-          
-          # Platform-specific build with error handling
-          if [ "${{ matrix.platform }}" = "linux" ]; then
-            RUST_BACKTRACE=1 pnpm run $BUILD_CMD $BUILD_ARGS
-          elif [ "${{ matrix.platform }}" = "macos" ]; then
-            # For macOS, try different approaches
-            echo "🍎 Attempting macOS build..."
-            
-            # First try: Standard build
-            if ! RUST_BACKTRACE=1 pnpm run $BUILD_CMD $BUILD_ARGS; then
-              echo "⚠️  First attempt failed, trying with clean cache..."
-              
-              # Clear Cargo cache and try again
-              cargo clean || true
-              rm -rf target/ || true
-              
-              # Second try: Clean build
-              if ! RUST_BACKTRACE=1 pnpm run $BUILD_CMD $BUILD_ARGS; then
-                echo "⚠️  Second attempt failed, trying native target only..."
-                
-                # Third try: Build for native target only (no cross-compilation)
-                RUST_BACKTRACE=1 pnpm run $BUILD_CMD || echo "❌ All build attempts failed"
-              fi
-            fi
-          else
-            # Windows
-            RUST_BACKTRACE=1 pnpm run $BUILD_CMD $BUILD_ARGS
-          fi
+          echo "🚀 Running: pnpm build"
+          RUST_BACKTRACE=1 pnpm build
           
       - name: Check build results
         shell: bash
