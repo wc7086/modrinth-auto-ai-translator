@@ -274,11 +274,17 @@ jobs:
             echo "📄 Checking: $pkg_file"
             dir=$(dirname "$pkg_file")
             
-            # Check if this package.json contains Tauri dependencies
-            if grep -q "tauri" "$pkg_file" 2>/dev/null; then
+            # Check if this package.json contains Tauri dependencies or scripts
+            if grep -q "@tauri-apps\|tauri.*build" "$pkg_file" 2>/dev/null; then
               echo "✅ Found Tauri project in: $dir"
-              FOUND_DIR="$dir"
-              break
+              # Also check if there's a src-tauri directory
+              if [ -d "$dir/src-tauri" ]; then
+                echo "✅ Confirmed: src-tauri directory exists"
+                FOUND_DIR="$dir"
+                break
+              else
+                echo "⚠️  Has Tauri dependencies but no src-tauri directory"
+              fi
             fi
           done < <(find . -name "package.json" -type f -print0)
           
@@ -317,12 +323,52 @@ jobs:
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
           pnpm install
           
+      - name: Detect build commands
+        id: detect-build
+        shell: bash
+        run: |
+          cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
+          echo "🔍 Detecting available build commands..."
+          
+          # Check package.json for available scripts
+          if [ -f "package.json" ]; then
+            echo "📄 Available npm scripts:"
+            jq -r '.scripts | to_entries[] | "\(.key): \(.value)"' package.json || echo "Failed to parse scripts"
+            
+            # Determine build command
+            if jq -e '.scripts.tauri' package.json >/dev/null; then
+              BUILD_CMD="tauri"
+            elif jq -e '.scripts["tauri:build"]' package.json >/dev/null; then
+              BUILD_CMD="tauri:build"
+            elif jq -e '.scripts.build' package.json >/dev/null; then
+              BUILD_CMD="build"
+            elif jq -e '.scripts["build:tauri"]' package.json >/dev/null; then
+              BUILD_CMD="build:tauri"
+            else
+              echo "❌ No suitable build command found"
+              echo "Available scripts:"
+              jq -r '.scripts | keys[]' package.json || echo "No scripts found"
+              exit 1
+            fi
+            
+            echo "✅ Selected build command: $BUILD_CMD"
+            echo "build-cmd=$BUILD_CMD" >> $GITHUB_OUTPUT
+          else
+            echo "❌ No package.json found"
+            exit 1
+          fi
+          
       - name: Build application
         shell: bash
         run: |
           echo "🏗️ Building for ${{ matrix.platform }}..."
           cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
-          pnpm run tauri build ${{ matrix.build-args }}
+          
+          BUILD_CMD="${{ steps.detect-build.outputs.build-cmd }}"
+          BUILD_ARGS="${{ matrix.build-args }}"
+          
+          echo "🚀 Running: pnpm run $BUILD_CMD $BUILD_ARGS"
+          pnpm run $BUILD_CMD $BUILD_ARGS
           
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
