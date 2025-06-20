@@ -96,6 +96,24 @@ class TextExtractor {
         }
       } else if (entry.isFile()) {
         const ext = path.extname(entry.name).toLowerCase();
+        const filename = entry.name.toLowerCase();
+        
+        // Skip configuration files that shouldn't be processed
+        const skipFiles = [
+          'nuxt.config.ts', 'nuxt.config.js',
+          'vite.config.ts', 'vite.config.js', 
+          'webpack.config.js', 'webpack.config.ts',
+          'rollup.config.js', 'rollup.config.ts',
+          'tailwind.config.js', 'tailwind.config.ts',
+          'tsconfig.json', 'package.json',
+          'eslint.config.js', 'eslint.config.ts'
+        ];
+        
+        if (skipFiles.includes(filename)) {
+          console.log(`⏭️  Skipping config file: ${entry.name}`);
+          return;
+        }
+        
         if (['.vue', '.js', '.ts', '.jsx', '.tsx'].includes(ext)) {
           await this.processFile(fullPath);
         }
