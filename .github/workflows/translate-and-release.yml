@@ -199,16 +199,11 @@ jobs:
             rust-targets: ''
             system-deps: ''
             build-args: ''
-          - platform: 'macos-intel'
+          - platform: 'macos'
             os: macos-latest
-            rust-targets: 'x86_64-apple-darwin'
+            rust-targets: ''
             system-deps: ''
-            build-args: '--target x86_64-apple-darwin'
-          - platform: 'macos-arm'
-            os: macos-latest
-            rust-targets: 'aarch64-apple-darwin'
-            system-deps: ''
-            build-args: '--target aarch64-apple-darwin'
+            build-args: ''
     
     runs-on: ${{ matrix.os }}
     
@@ -386,7 +381,7 @@ jobs:
           # Platform-specific build with error handling
           if [ "${{ matrix.platform }}" = "linux" ]; then
             RUST_BACKTRACE=1 pnpm run $BUILD_CMD $BUILD_ARGS
-          elif [[ "${{ matrix.platform }}" == macos-* ]]; then
+          elif [ "${{ matrix.platform }}" = "macos" ]; then
             # For macOS, try different approaches
             echo "🍎 Attempting macOS build..."
             
