@@ -13,7 +13,7 @@ class TextExtractor {
     // Patterns for identifying translatable text
     this.patterns = {
       vue: {
-        template: /<template[^>]*>([\s\S]*?)<\/template>/gi,
+        template: /<template[^>]*>([\s\S]*?)<\/template>/i, // Removed 'g' flag
         scriptString: /['"`]([^'"`\n\r]{3,}?)['"`]/g,
         interpolation: /\{\{([^}]+)\}\}/g
       },
@@ -123,31 +123,56 @@ class TextExtractor {
   }
 
   extractFromVue(content, filePath) {
-    // Extract from template section
-    const templateMatch = content.match(this.patterns.vue.template);
-    if (templateMatch) {
-      const templateContent = templateMatch[1];
-      this.extractTextFromTemplate(templateContent, filePath);
-    }
-    
-    // Extract from script section
-    const scriptMatch = content.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
-    if (scriptMatch) {
-      const scriptContent = scriptMatch[1];
-      this.extractTextFromScript(scriptContent, filePath);
+    try {
+      if (!content || typeof content !== 'string') {
+        console.warn(`   ⚠️  Invalid Vue content in ${filePath}`);
+        return;
+      }
+      
+      // Extract from template section
+      const templateRegex = new RegExp(this.patterns.vue.template.source, this.patterns.vue.template.flags);
+      const templateMatch = templateRegex.exec(content);
+      if (templateMatch && templateMatch[1]) {
+        const templateContent = templateMatch[1];
+        this.extractTextFromTemplate(templateContent, filePath);
+      }
+      
+      // Extract from script section
+      const scriptMatch = content.match(/<script[^>]*>([\s\S]*?)<\/script>/i);
+      if (scriptMatch && scriptMatch[1]) {
+        const scriptContent = scriptMatch[1];
+        this.extractTextFromScript(scriptContent, filePath);
+      }
+    } catch (error) {
+      console.warn(`   ⚠️  Error in extractFromVue: ${error.message}`);
     }
   }
 
   extractFromScript(content, filePath, ext) {
-    if (['.jsx', '.tsx'].includes(ext)) {
-      this.extractTextFromJSX(content, filePath);
-    } else {
-      this.extractTextFromScript(content, filePath);
+    try {
+      if (!content || typeof content !== 'string') {
+        console.warn(`   ⚠️  Invalid script content in ${filePath}`);
+        return;
+      }
+      
+      if (['.jsx', '.tsx'].includes(ext)) {
+        this.extractTextFromJSX(content, filePath);
+      } else {
+        this.extractTextFromScript(content, filePath);
+      }
+    } catch (error) {
+      console.warn(`   ⚠️  Error in extractFromScript: ${error.message}`);
     }
   }
 
   extractTextFromTemplate(content, filePath) {
     try {
+      // Validate input
+      if (!content || typeof content !== 'string') {
+        console.warn(`   ⚠️  Invalid template content in ${filePath}`);
+        return;
+      }
+      
       // Remove Vue directives and interpolations temporarily
       const cleanContent = content
         .replace(/\{\{[^}]+\}\}/g, '') // Remove interpolations
@@ -193,6 +218,11 @@ class TextExtractor {
 
   extractTextFromScript(content, filePath) {
     try {
+      if (!content || typeof content !== 'string') {
+        console.warn(`   ⚠️  Invalid script content in ${filePath}`);
+        return;
+      }
+      
       const stringMatches = content.match(this.patterns.js.string);
       if (stringMatches) {
         stringMatches.forEach(match => {
@@ -215,6 +245,11 @@ class TextExtractor {
 
   extractTextFromJSX(content, filePath) {
     try {
+      if (!content || typeof content !== 'string') {
+        console.warn(`   ⚠️  Invalid JSX content in ${filePath}`);
+        return;
+      }
+      
       // First extract regular strings
       this.extractTextFromScript(content, filePath);
       
