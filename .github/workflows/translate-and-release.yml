@@ -49,7 +49,7 @@ jobs:
         with:
           path: translator-scripts
           
-      - name: Setup Node.js and pnpm
+      - name: Setup Node.js, pnpm and caches
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -60,7 +60,7 @@ jobs:
           package_json_file: 'package.json'
           run_install: false
           
-      - name: Setup caches
+      - name: Setup translation cache
         uses: actions/cache@v4
         with:
           path: |
@@ -90,7 +90,25 @@ jobs:
           echo "🔄 Replacing text in source code..."
           node replace-text.js .
           
-      - name: Check translation completion
+          echo "🏷️ Generating release tag..."
+          FINAL_TAG="${{ inputs.release_tag }}-$(echo '${{ inputs.target_language }}' | tr '[:upper:]' '[:lower:]' | sed 's/简体中文/zh-cn/g' | sed 's/繁体中文/zh-tw/g' | sed 's/english/en/g')"
+          if [ "${{ inputs.release_tag }}" = "latest" ]; then
+            SOURCE_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.9.5")
+            FINAL_TAG="${SOURCE_TAG}-zh-cn"
+          fi
+          echo "release-tag=$FINAL_TAG" >> $GITHUB_OUTPUT
+          echo "🏷️ Release tag: $FINAL_TAG"
+          
+          echo "📦 Creating source archive..."
+          tar -czf translated-source.tar.gz \
+            --exclude='.git' \
+            --exclude='translator-scripts' \
+            --exclude='translated-source.tar.gz' \
+            --warning=no-file-changed \
+            --warning=no-file-removed \
+            . || [ $? -eq 1 ]
+            
+      - name: Set outputs
         id: check-translation
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
@@ -101,27 +119,14 @@ jobs:
           
       - name: Generate release tag
         id: generate-tag
+        if: ${{ !inputs.dry_run }}
         run: |
-          echo "🏷️ Generating release tag..."
           FINAL_TAG="${{ inputs.release_tag }}-$(echo '${{ inputs.target_language }}' | tr '[:upper:]' '[:lower:]' | sed 's/简体中文/zh-cn/g' | sed 's/繁体中文/zh-tw/g' | sed 's/english/en/g')"
           if [ "${{ inputs.release_tag }}" = "latest" ]; then
             SOURCE_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.9.5")
             FINAL_TAG="${SOURCE_TAG}-zh-cn"
           fi
           echo "release-tag=$FINAL_TAG" >> $GITHUB_OUTPUT
-          echo "🏷️ Release tag: $FINAL_TAG"
-          
-      - name: Upload artifacts and source
-        if: ${{ !inputs.dry_run }}
-        run: |
-          echo "📦 Creating source archive..."
-          tar -czf translated-source.tar.gz \
-            --exclude='.git' \
-            --exclude='translator-scripts' \
-            --exclude='translated-source.tar.gz' \
-            --warning=no-file-changed \
-            --warning=no-file-removed \
-            . || [ $? -eq 1 ]
             
       - name: Upload translation artifacts
         uses: actions/upload-artifact@v4
@@ -191,7 +196,10 @@ jobs:
           package_json_file: 'package.json'
           run_install: false
           
-      - name: Setup caches
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Setup build caches
         uses: actions/cache@v4
         with:
           path: |
@@ -204,9 +212,6 @@ jobs:
           key: ${{ runner.os }}-build-${{ hashFiles('**/pnpm-lock.yaml', '**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-build-
-          
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
         
       - name: Install system dependencies
         if: matrix.system-deps != ''
@@ -268,18 +273,13 @@ jobs:
           echo "🏗️ Building for ${{ matrix.platform }}..."
           echo "📋 Available scripts:"
           cat package.json | grep -A 10 '"scripts"' || true
-          echo "🔧 Checking for Tauri configuration..."
-          ls -la src-tauri/ 2>/dev/null || echo "No src-tauri directory found"
           
-          # Try different build commands
-          if [ -f "package.json" ] && grep -q "tauri.*build" package.json; then
+          # Try Tauri build commands
+          if grep -q "tauri.*build" package.json 2>/dev/null; then
             echo "🚀 Running: pnpm tauri build"
             pnpm tauri build
-          elif [ -f "package.json" ] && grep -q '"build".*"tauri"' package.json; then
-            echo "🚀 Running: pnpm build"
-            pnpm build
           else
-            echo "🚀 Running: pnpm build (fallback)"
+            echo "🚀 Running: pnpm build"
             pnpm build
           fi
           
