@@ -310,20 +310,29 @@ class AITranslator {
     
     return `You are a professional software localization expert. Translate the following UI text strings from English to ${this.targetLanguage}.
 
-IMPORTANT INSTRUCTIONS:
-- Maintain the original meaning and context
+CRITICAL INSTRUCTIONS - READ CAREFULLY:
+- ONLY translate genuine user interface text (buttons, messages, labels, tooltips)
+- DO NOT translate if the text appears to be:
+  * Package names (e.g., "floating-vue", "vue-router")
+  * File paths or URLs (e.g., "./component.vue", "https://...")
+  * Function names or variables (e.g., "onClick", "userData")
+  * CSS classes or IDs (e.g., "btn-primary", "#app")
+  * Technical identifiers or code snippets
+  * Import statements or module names
+  * Configuration keys or API endpoints
+- Preserve placeholders, variables, and special formatting (like {}, [], etc.)
 - Keep technical terms and proper nouns in English when appropriate
-- Preserve any placeholders, variables, or special formatting (like {}, [], etc.)
 - Make translations natural and user-friendly for ${this.targetLanguage} speakers
-- If a string is already in ${this.targetLanguage} or doesn't need translation, return it unchanged
-- Do not translate URLs, file paths, technical identifiers, or code-related strings
+- If uncertain whether text is UI-related, DO NOT translate it - return original text
 
-Context: These are UI strings from a desktop application interface.
+WHEN IN DOUBT: If text looks technical or code-related, keep it unchanged!
+
+Context: These are extracted from a Vue.js desktop application. Only user-facing text should be translated.
 
 Text strings to translate:
 ${textList}
 
-Please respond with ONLY the translated strings in the same numbered format:
+Please respond with ONLY the translated strings in the same numbered format. Use original text if unsure:
 1. [translated text 1]
 2. [translated text 2]
 ...
@@ -333,7 +342,10 @@ Do not include any explanation or additional text.`;
 
   async translateSingle(text) {
     const prompt = `Translate this UI text from English to ${this.targetLanguage}. 
-Keep technical terms, URLs, and code unchanged. Make it natural for ${this.targetLanguage} users.
+
+CRITICAL: Only translate if this is genuine user interface text (buttons, messages, labels). 
+DO NOT translate if it looks like: package names, file paths, function names, CSS classes, or any technical identifiers.
+WHEN IN DOUBT: Return the original text unchanged.
 
 Text: "${text}"
 
