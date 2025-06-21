@@ -37,7 +37,10 @@ class TextExtractor {
       /^var\(|calc\(|url\(/,   // CSS functions
       /console\.|error|warn|info|debug|log/i, // Console methods
       /^[a-z]+:[a-z]+$/,       // Key-value pairs
-      /^[A-Z][a-zA-Z]*Error$/  // Error types
+      /^[A-Z][a-zA-Z]*Error$/, // Error types
+      /^[a-z]+-[a-z-]+$/,      // Package names (kebab-case)
+      /^@[a-z]/,               // Scoped package names
+      /^\w+\/\w+$/             // Path-like identifiers
     ];
     
     // Technical terms that shouldn't be translated
@@ -47,7 +50,8 @@ class TextExtractor {
       'GitHub', 'Git', 'OAuth', 'JWT', 'UUID', 'URL', 'URI', 'SQL',
       'CORS', 'REST', 'GraphQL', 'WebSocket', 'localStorage', 'sessionStorage',
       'getElementById', 'querySelector', 'addEventListener', 'fetch', 'async', 'await',
-      'true', 'false', 'null', 'undefined', 'NaN', 'Infinity'
+      'true', 'false', 'null', 'undefined', 'NaN', 'Infinity',
+      'floating-vue', 'vue-router', 'vue-virtual-scroller', 'vue-multiselect'
     ]);
   }
 
