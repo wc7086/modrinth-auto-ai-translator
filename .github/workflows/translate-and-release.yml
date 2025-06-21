@@ -80,9 +80,14 @@ jobs:
           TARGET_LANGUAGE: ${{ inputs.target_language }}
         run: |
           cp translator-scripts/scripts/*.js .
+          echo "=== Extracting translatable text ==="
           node extract-text.js apps/app-frontend
+          echo "=== Translating text ==="  
           node translate-text.js
+          echo "=== Replacing text in source ==="
           node replace-text.js apps/app-frontend
+          echo "=== Verifying changes in components ==="
+          find apps/app-frontend/src/components -name "*.vue" | head -3 | xargs grep -l "中文\|汉化" || echo "No Chinese text found in components yet"
           
       - name: Prepare release
         if: ${{ !inputs.dry_run }}
