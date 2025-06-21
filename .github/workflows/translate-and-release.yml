@@ -220,36 +220,24 @@ jobs:
       - name: Find and build application
         shell: bash
         run: |
-          echo "🔍 Finding Tauri application directory..."
-          
-          # First check for @tauri-apps dependency
+          # Find Tauri application directory
           APP_DIR=""
-          echo "🔍 Checking for @tauri-apps dependencies..."
           for pkg_file in $(find . -name "package.json" -type f); do
             dir=$(dirname "$pkg_file")
-            echo "📄 Checking: $pkg_file"
             if grep -q "@tauri-apps" "$pkg_file" 2>/dev/null; then
-              echo "✅ Found @tauri-apps in: $dir"
               if [ -d "$dir/src-tauri" ]; then
                 APP_DIR="$dir"
-                echo "✅ Found Tauri app with src-tauri: $APP_DIR"
                 break
-              else
-                echo "⚠️  No src-tauri directory in $dir, checking for Tauri config..."
-                ls -la "$dir/" | grep -i tauri || true
               fi
             fi
           done
           
-          # Fallback: look for common Tauri app directory names even without src-tauri
+          # Fallback to common directories
           if [ -z "$APP_DIR" ]; then
-            echo "🔍 Fallback: checking common app directories..."
             for candidate in "./apps/app" "./app" "./apps/desktop" "./desktop"; do
               if [ -d "$candidate" ] && [ -f "$candidate/package.json" ]; then
-                echo "📁 Checking candidate: $candidate"
                 if grep -q "@tauri-apps\|tauri" "$candidate/package.json" 2>/dev/null; then
                   APP_DIR="$candidate"
-                  echo "✅ Found Tauri app by directory name: $APP_DIR"
                   break
                 fi
               fi
@@ -257,51 +245,21 @@ jobs:
           fi
           
           if [ -z "$APP_DIR" ]; then
-            echo "❌ Could not find Tauri application directory"
-            echo "📁 Available directories with package.json:"
-            find . -name "package.json" -type f | head -10
-            echo "🔍 Let's check the content of ./apps/app/package.json:"
-            cat "./apps/app/package.json" 2>/dev/null | head -20 || echo "File not found"
             exit 1
           fi
           
-          echo "✅ Using app directory: $APP_DIR"
-          
-          echo "📦 Installing dependencies..."
           cd "$APP_DIR" && pnpm install
           
-          echo "🏗️ Building for ${{ matrix.platform }}..."
-          echo "📋 Available scripts:"
-          cat package.json | grep -A 10 '"scripts"' || true
-          
-          # Try Tauri build commands
+          # Build application
           if grep -q "tauri.*build" package.json 2>/dev/null; then
-            echo "🚀 Running: pnpm tauri build"
             pnpm tauri build
           else
-            echo "🚀 Running: pnpm build"
             pnpm build
           fi
           
-          echo "📦 Checking build results..."
-          echo "🔍 Looking for Tauri bundle directory..."
-          find . -name "bundle" -type d | head -5
-          echo "🔍 Looking for any build artifacts..."
-          find . \( -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.rpm" \) -print | head -10
-          
-          # Check for bundle directory with artifacts
+          # Verify build output
           BUNDLE_DIRS=$(find . -name "bundle" -type d)
-          if [ -n "$BUNDLE_DIRS" ]; then
-            echo "✅ Build completed - Found bundle directories:"
-            echo "$BUNDLE_DIRS"
-            for dir in $BUNDLE_DIRS; do
-              echo "📁 Contents of $dir:"
-              ls -la "$dir"/ 2>/dev/null || true
-            done
-          elif [ -d "src-tauri/target" ] || [ -d "target" ]; then
-            echo "✅ Build completed - Tauri target directory found"
-          else
-            echo "❌ No Tauri build output found"
+          if [ -z "$BUNDLE_DIRS" ] && [ ! -d "src-tauri/target" ] && [ ! -d "target" ]; then
             exit 1
           fi
           
@@ -348,8 +306,6 @@ jobs:
           RELEASE_TAG: ${{ needs.translate.outputs.release-tag }}
           TARGET_LANGUAGE: ${{ inputs.target_language }}
         run: |
-          echo "🚀 Creating GitHub release..."
-          
           cat > release_notes.md << EOF
           # Modrinth Auto-Translated Release
           
@@ -376,5 +332,3 @@ jobs:
             --notes-file release_notes.md \
             --draft \
             build-artifacts/* || echo "Release creation failed, but continuing..."
-            
-          echo "✅ Release process completed"
