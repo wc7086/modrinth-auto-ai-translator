@@ -216,10 +216,36 @@ jobs:
         shell: bash
         run: |
           echo "🔍 Finding Tauri application directory..."
-          APP_DIR=$(find . -name "package.json" -type f -exec grep -l "@tauri-apps" {} \; | head -1 | xargs dirname)
+          
+          # Look for directory with both package.json containing @tauri-apps AND src-tauri directory
+          APP_DIR=""
+          for pkg_file in $(find . -name "package.json" -type f); do
+            dir=$(dirname "$pkg_file")
+            if grep -q "@tauri-apps" "$pkg_file" 2>/dev/null && [ -d "$dir/src-tauri" ]; then
+              APP_DIR="$dir"
+              echo "✅ Found Tauri app with src-tauri: $APP_DIR"
+              break
+            fi
+          done
+          
+          # Fallback: look for common Tauri app directory names
           if [ -z "$APP_DIR" ]; then
-            APP_DIR="./apps/app"
+            for candidate in "./apps/app" "./app" "./apps/desktop" "./desktop"; do
+              if [ -d "$candidate" ] && [ -f "$candidate/package.json" ] && [ -d "$candidate/src-tauri" ]; then
+                APP_DIR="$candidate"
+                echo "✅ Found Tauri app by directory name: $APP_DIR"
+                break
+              fi
+            done
           fi
+          
+          if [ -z "$APP_DIR" ]; then
+            echo "❌ Could not find Tauri application directory"
+            echo "📁 Available directories with package.json:"
+            find . -name "package.json" -type f | head -10
+            exit 1
+          fi
+          
           echo "✅ Using app directory: $APP_DIR"
           
           echo "📦 Installing dependencies..."
