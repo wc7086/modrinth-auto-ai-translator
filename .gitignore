@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+*.pnpm-debug.log
+*.yarn-integrity
+
+# Build outputs
+dist/
+build/
+*.tgz
+
+# Environment files
+.env
+.env.local
+.env.production
+
+# Cache and temporary files
+.cache/
+temp/
+tmp/
+*.tmp
+*.cache
+
+# Translation files (generated)
+extracted-text.json
+translations.json
+translation-mapping.json
+translation-cache.json
+replacement-report.json
+replacement-summary.md
+
+# Backup directories
+*-backup/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test repositories
+test-*/
