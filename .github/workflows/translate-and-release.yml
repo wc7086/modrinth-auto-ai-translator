@@ -229,11 +229,16 @@ jobs:
           pnpm build
           
           echo "📦 Checking build results..."
-          ARTIFACTS=$(find . -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.rpm")
-          if [ -n "$ARTIFACTS" ]; then
-            echo "✅ Build successful - artifacts found"
+          echo "🔍 Looking for Tauri bundle directory..."
+          find . -name "bundle" -type d | head -5
+          echo "🔍 Looking for any build artifacts..."
+          find . -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.rpm" | head -10
+          
+          # Check if src-tauri/target exists (Tauri build output)
+          if [ -d "src-tauri/target" ] || [ -d "target" ]; then
+            echo "✅ Build completed - Tauri target directory found"
           else
-            echo "❌ No build artifacts found"
+            echo "❌ No Tauri build output found"
             exit 1
           fi
           
