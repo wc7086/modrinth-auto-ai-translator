@@ -217,24 +217,36 @@ jobs:
         run: |
           echo "🔍 Finding Tauri application directory..."
           
-          # Look for directory with both package.json containing @tauri-apps AND src-tauri directory
+          # First check for @tauri-apps dependency
           APP_DIR=""
+          echo "🔍 Checking for @tauri-apps dependencies..."
           for pkg_file in $(find . -name "package.json" -type f); do
             dir=$(dirname "$pkg_file")
-            if grep -q "@tauri-apps" "$pkg_file" 2>/dev/null && [ -d "$dir/src-tauri" ]; then
-              APP_DIR="$dir"
-              echo "✅ Found Tauri app with src-tauri: $APP_DIR"
-              break
+            echo "📄 Checking: $pkg_file"
+            if grep -q "@tauri-apps" "$pkg_file" 2>/dev/null; then
+              echo "✅ Found @tauri-apps in: $dir"
+              if [ -d "$dir/src-tauri" ]; then
+                APP_DIR="$dir"
+                echo "✅ Found Tauri app with src-tauri: $APP_DIR"
+                break
+              else
+                echo "⚠️  No src-tauri directory in $dir, checking for Tauri config..."
+                ls -la "$dir/" | grep -i tauri || true
+              fi
             fi
           done
           
-          # Fallback: look for common Tauri app directory names
+          # Fallback: look for common Tauri app directory names even without src-tauri
           if [ -z "$APP_DIR" ]; then
+            echo "🔍 Fallback: checking common app directories..."
             for candidate in "./apps/app" "./app" "./apps/desktop" "./desktop"; do
-              if [ -d "$candidate" ] && [ -f "$candidate/package.json" ] && [ -d "$candidate/src-tauri" ]; then
-                APP_DIR="$candidate"
-                echo "✅ Found Tauri app by directory name: $APP_DIR"
-                break
+              if [ -d "$candidate" ] && [ -f "$candidate/package.json" ]; then
+                echo "📁 Checking candidate: $candidate"
+                if grep -q "@tauri-apps\|tauri" "$candidate/package.json" 2>/dev/null; then
+                  APP_DIR="$candidate"
+                  echo "✅ Found Tauri app by directory name: $APP_DIR"
+                  break
+                fi
               fi
             done
           fi
@@ -243,6 +255,8 @@ jobs:
             echo "❌ Could not find Tauri application directory"
             echo "📁 Available directories with package.json:"
             find . -name "package.json" -type f | head -10
+            echo "🔍 Let's check the content of ./apps/app/package.json:"
+            cat "./apps/app/package.json" 2>/dev/null | head -20 || echo "File not found"
             exit 1
           fi
           
