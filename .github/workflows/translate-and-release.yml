@@ -220,7 +220,15 @@ jobs:
           name: translated-source
           path: ./download
           
+      - name: Install tar on Windows
+        if: runner.os == 'Windows'
+        run: |
+          echo "📦 Installing tar on Windows..."
+          choco install gnuwin32-coreutils.install -y
+          echo "✅ tar installed successfully"
+          
       - name: Extract translated source
+        shell: bash
         run: |
           echo "📦 Extracting translated source archive..."
           cd download
