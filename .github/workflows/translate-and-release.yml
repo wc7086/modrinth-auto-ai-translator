@@ -80,6 +80,14 @@ jobs:
           TARGET_LANGUAGE: ${{ inputs.target_language }}
         run: |
           cp translator-scripts/scripts/*.js .
+          echo "=== Checking directory structure ==="
+          ls -la apps/app-frontend/
+          echo "=== Checking src directory ==="
+          ls -la apps/app-frontend/src/
+          echo "=== Checking components directory ==="
+          ls -la apps/app-frontend/src/components/ | head -10
+          echo "=== Finding Vue files ==="
+          find apps/app-frontend -name "*.vue" | head -10
           echo "=== Extracting translatable text ==="
           node extract-text.js apps/app-frontend
           echo "=== Translating text ==="  
