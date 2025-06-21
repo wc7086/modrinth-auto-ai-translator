@@ -175,7 +175,14 @@ jobs:
         run: |
           echo "📦 Creating complete source archive..."
           # Create tar archive to preserve all files including hidden ones and permissions
-          tar -czf translated-source.tar.gz --exclude='.git' --exclude='translator-scripts' .
+          # Use --exclude patterns and ignore warnings about files changing during read
+          tar -czf translated-source.tar.gz \
+            --exclude='.git' \
+            --exclude='translator-scripts' \
+            --exclude='translated-source.tar.gz' \
+            --warning=no-file-changed \
+            --warning=no-file-removed \
+            . || [ $? -eq 1 ]
           echo "✅ Archive created: $(ls -lh translated-source.tar.gz)"
           
       - name: Upload translated source code
