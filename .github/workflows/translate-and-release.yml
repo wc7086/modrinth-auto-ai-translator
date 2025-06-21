@@ -80,16 +80,10 @@ jobs:
           TARGET_LANGUAGE: ${{ inputs.target_language }}
         run: |
           cp translator-scripts/scripts/*.js .
-          echo "=== Checking directory structure ==="
-          ls -la apps/app-frontend/
-          echo "=== Checking src directory ==="
-          ls -la apps/app-frontend/src/
-          echo "=== Checking components directory ==="
-          ls -la apps/app-frontend/src/components/ | head -10
-          echo "=== Finding Vue files ==="
-          find apps/app-frontend -name "*.vue" | head -10
-          echo "=== Extracting translatable text ==="
-          node extract-text.js apps/app-frontend
+          echo "=== Installing Vue SFC dependencies ==="
+          npm install @vue/compiler-sfc @babel/parser @babel/traverse @babel/types
+          echo "=== Extracting translatable text with Vue SFC parser ==="
+          node translator-scripts/scripts/vue-sfc-extractor.js apps/app-frontend
           echo "=== Translating text ==="  
           node translate-text.js
           echo "=== Replacing text in source ==="
@@ -99,8 +93,6 @@ jobs:
           echo "=== Verifying changes in components ==="
           echo "Checking for any Chinese characters in Vue files..."
           find apps/app-frontend/src/components -name "*.vue" | head -3 | xargs grep -l "[\u4e00-\u9fff]" && echo "Chinese text found in components!" || echo "No Chinese text found in components yet"
-          echo "Sample content from first Vue file:"
-          find apps/app-frontend/src/components -name "*.vue" | head -1 | xargs head -20
           
       - name: Save translation cache
         uses: actions/cache/save@v4
