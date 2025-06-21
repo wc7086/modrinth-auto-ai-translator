@@ -25,10 +25,10 @@ class TextExtractor {
     
     // Text to exclude from translation
     this.excludePatterns = [
-      /^[a-zA-Z0-9_\-\.]+$/,  // Variables/identifiers
       /^https?:\/\//,          // URLs
-      /^\/[\/\w\-\.]*$/,       // File paths
-      /^[A-Z_]+$/,             // Constants
+      /^\/[\/\w\-\.]*$/,       // File paths  
+      /^\.[\/\w\-]*$/,         // Relative paths starting with .
+      /^[A-Z_]{2,}$/,          // Constants (all caps)
       /^\d+(\.\d+)*$/,         // Version numbers
       /^[A-Za-z0-9+/=]+$/,     // Base64-like strings
       /^#[0-9a-fA-F]{3,8}$/,   // Hex colors
@@ -40,7 +40,10 @@ class TextExtractor {
       /^[A-Z][a-zA-Z]*Error$/, // Error types
       /^[a-z]+-[a-z-]+$/,      // Package names (kebab-case)
       /^@[a-z]/,               // Scoped package names
-      /^\w+\/\w+$/             // Path-like identifiers
+      /^\w+\/\w+$/,            // Path-like identifiers
+      /^\?[a-zA-Z]/,           // URL parameters
+      /^\w+\(\)/,              // Function calls
+      /^\w+\.\w+/              // Property access
     ];
     
     // Technical terms that shouldn't be translated
