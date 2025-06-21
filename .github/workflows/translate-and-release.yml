@@ -79,27 +79,28 @@ jobs:
           API_ENDPOINT: ${{ inputs.api_endpoint }}
           TARGET_LANGUAGE: ${{ inputs.target_language }}
         run: |
-          echo "📝 Processing translation..."
           cp translator-scripts/scripts/*.js .
-          node extract-text.js apps/app-frontend
-          node translate-text.js
           
-      - name: Replace text and prepare release
+          # Find and translate all frontend directories
+          for frontend_dir in apps/app-frontend apps/frontend apps/app; do
+            if [ -d "$frontend_dir" ]; then
+              echo "Translating: $frontend_dir"
+              node extract-text.js "$frontend_dir"
+              node translate-text.js
+              node replace-text.js "$frontend_dir"
+            fi
+          done
+          
+      - name: Prepare release
         if: ${{ !inputs.dry_run }}
         run: |
-          echo "🔄 Replacing text in source code..."
-          node replace-text.js .
-          
-          echo "🏷️ Generating release tag..."
           FINAL_TAG="${{ inputs.release_tag }}-$(echo '${{ inputs.target_language }}' | tr '[:upper:]' '[:lower:]' | sed 's/简体中文/zh-cn/g' | sed 's/繁体中文/zh-tw/g' | sed 's/english/en/g')"
           if [ "${{ inputs.release_tag }}" = "latest" ]; then
             SOURCE_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.9.5")
             FINAL_TAG="${SOURCE_TAG}-zh-cn"
           fi
           echo "release-tag=$FINAL_TAG" >> $GITHUB_OUTPUT
-          echo "🏷️ Release tag: $FINAL_TAG"
           
-          echo "📦 Creating source archive..."
           tar -czf translated-source.tar.gz \
             --exclude='.git' \
             --exclude='translator-scripts' \
