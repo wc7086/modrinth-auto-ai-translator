@@ -170,12 +170,20 @@ jobs:
           echo "📊 Git status after force add:"
           git status --porcelain | grep "sqlx" || echo "No sqlx files in git status"
           
+      - name: Create complete source archive
+        if: ${{ !inputs.dry_run }}
+        run: |
+          echo "📦 Creating complete source archive..."
+          # Create tar archive to preserve all files including hidden ones and permissions
+          tar -czf translated-source.tar.gz --exclude='.git' --exclude='translator-scripts' .
+          echo "✅ Archive created: $(ls -lh translated-source.tar.gz)"
+          
       - name: Upload translated source code
         if: ${{ !inputs.dry_run }}
         uses: actions/upload-artifact@v4
         with:
           name: translated-source
-          path: .
+          path: translated-source.tar.gz
           retention-days: 1
           
 
@@ -203,8 +211,16 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: translated-source
-          path: .
+          path: ./download
           
+      - name: Extract translated source
+        run: |
+          echo "📦 Extracting translated source archive..."
+          cd download
+          tar -xzf translated-source.tar.gz -C ..
+          cd ..
+          rm -rf download
+          echo "✅ Source extracted successfully"
           
       - name: Setup Node.js
         uses: actions/setup-node@v4
