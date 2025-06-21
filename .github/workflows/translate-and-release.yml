@@ -158,7 +158,7 @@ jobs:
           find . -name ".sqlx" -type d
           find . -name "sqlx-data.json" -type f
           echo "📄 SQLx cache files:"
-          find . -path "*/.sqlx/*" -type f | head -10
+          find . -path "*/.sqlx/*" -type f | head -10 || true
           
           echo "📄 Checking .gitignore for SQLx exclusions:"
           if [ -f ".gitignore" ]; then
@@ -342,7 +342,7 @@ jobs:
           echo "🗂️ Looking for .sqlx directories:"
           find . -name ".sqlx" -type d
           echo "📄 SQLx cache files:"
-          find . -path "*/.sqlx/*" -type f | head -10
+          find . -path "*/.sqlx/*" -type f | head -10 || true
           
           echo "🔧 Checking workspace structure for app-lib dependency:"
           if [ -f "Cargo.toml" ]; then
