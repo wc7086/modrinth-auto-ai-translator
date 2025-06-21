@@ -94,6 +94,8 @@ jobs:
           node translate-text.js
           echo "=== Replacing text in source ==="
           node replace-text.js apps/app-frontend
+          echo "=== Cleaning up backup directories ==="
+          rm -rf apps/app-frontend-backup
           echo "=== Verifying changes in components ==="
           find apps/app-frontend/src/components -name "*.vue" | head -3 | xargs grep -l "中文\|汉化" || echo "No Chinese text found in components yet"
           
@@ -255,7 +257,7 @@ jobs:
             exit 1
           fi
           
-          cd "$APP_DIR" && pnpm install
+          cd "$APP_DIR" && pnpm install --no-frozen-lockfile
           
           # Build application
           if grep -q "tauri.*build" package.json 2>/dev/null; then
