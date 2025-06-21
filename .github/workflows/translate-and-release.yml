@@ -66,7 +66,7 @@ jobs:
           path: |
             translation-cache.json
             ~/.local/share/pnpm
-          key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ github.run_id }}
           restore-keys: |
             translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-
             translation-cache-${{ inputs.openai_model }}-
@@ -98,6 +98,13 @@ jobs:
           rm -rf apps/app-frontend-backup
           echo "=== Verifying changes in components ==="
           find apps/app-frontend/src/components -name "*.vue" | head -3 | xargs grep -l "中文\|汉化" || echo "No Chinese text found in components yet"
+          
+      - name: Save translation cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: translation-cache.json
+          key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ github.run_id }}
           
       - name: Prepare release
         if: ${{ !inputs.dry_run }}
