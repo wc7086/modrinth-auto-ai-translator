@@ -97,7 +97,10 @@ jobs:
           echo "=== Cleaning up backup directories ==="
           rm -rf apps/app-frontend-backup
           echo "=== Verifying changes in components ==="
-          find apps/app-frontend/src/components -name "*.vue" | head -3 | xargs grep -l "中文\|汉化" || echo "No Chinese text found in components yet"
+          echo "Checking for any Chinese characters in Vue files..."
+          find apps/app-frontend/src/components -name "*.vue" | head -3 | xargs grep -l "[\u4e00-\u9fff]" && echo "Chinese text found in components!" || echo "No Chinese text found in components yet"
+          echo "Sample content from first Vue file:"
+          find apps/app-frontend/src/components -name "*.vue" | head -1 | xargs head -20
           
       - name: Save translation cache
         uses: actions/cache/save@v4
