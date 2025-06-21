@@ -226,7 +226,22 @@ jobs:
           cd "$APP_DIR" && pnpm install
           
           echo "🏗️ Building for ${{ matrix.platform }}..."
-          pnpm build
+          echo "📋 Available scripts:"
+          cat package.json | grep -A 10 '"scripts"' || true
+          echo "🔧 Checking for Tauri configuration..."
+          ls -la src-tauri/ 2>/dev/null || echo "No src-tauri directory found"
+          
+          # Try different build commands
+          if [ -f "package.json" ] && grep -q "tauri.*build" package.json; then
+            echo "🚀 Running: pnpm tauri build"
+            pnpm tauri build
+          elif [ -f "package.json" ] && grep -q '"build".*"tauri"' package.json; then
+            echo "🚀 Running: pnpm build"
+            pnpm build
+          else
+            echo "🚀 Running: pnpm build (fallback)"
+            pnpm build
+          fi
           
           echo "📦 Checking build results..."
           echo "🔍 Looking for Tauri bundle directory..."
