@@ -151,7 +151,7 @@ class TextReplacer {
         
         if (skipFiles.includes(filename)) {
           console.log(`⏭️  Skipping config file: ${entry.name}`);
-          return;
+          continue;
         }
         
         if (['.vue', '.js', '.ts', '.jsx', '.tsx'].includes(ext)) {
