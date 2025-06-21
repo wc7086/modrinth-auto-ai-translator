@@ -232,10 +232,18 @@ jobs:
           echo "🔍 Looking for Tauri bundle directory..."
           find . -name "bundle" -type d | head -5
           echo "🔍 Looking for any build artifacts..."
-          find . -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.rpm" | head -10
+          find . \( -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.rpm" \) -print | head -10
           
-          # Check if src-tauri/target exists (Tauri build output)
-          if [ -d "src-tauri/target" ] || [ -d "target" ]; then
+          # Check for bundle directory with artifacts
+          BUNDLE_DIRS=$(find . -name "bundle" -type d)
+          if [ -n "$BUNDLE_DIRS" ]; then
+            echo "✅ Build completed - Found bundle directories:"
+            echo "$BUNDLE_DIRS"
+            for dir in $BUNDLE_DIRS; do
+              echo "📁 Contents of $dir:"
+              ls -la "$dir"/ 2>/dev/null || true
+            done
+          elif [ -d "src-tauri/target" ] || [ -d "target" ]; then
             echo "✅ Build completed - Tauri target directory found"
           else
             echo "❌ No Tauri build output found"
