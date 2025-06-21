@@ -80,16 +80,9 @@ jobs:
           TARGET_LANGUAGE: ${{ inputs.target_language }}
         run: |
           cp translator-scripts/scripts/*.js .
-          
-          # Find and translate all frontend directories
-          for frontend_dir in apps/app-frontend apps/frontend apps/app; do
-            if [ -d "$frontend_dir" ]; then
-              echo "Translating: $frontend_dir"
-              node extract-text.js "$frontend_dir"
-              node translate-text.js
-              node replace-text.js "$frontend_dir"
-            fi
-          done
+          node extract-text.js apps/app-frontend
+          node translate-text.js
+          node replace-text.js apps/app-frontend
           
       - name: Prepare release
         if: ${{ !inputs.dry_run }}
