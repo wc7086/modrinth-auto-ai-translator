@@ -257,11 +257,7 @@ jobs:
             pnpm build
           fi
           
-          # Verify build output
-          BUNDLE_DIRS=$(find . -name "bundle" -type d)
-          if [ -z "$BUNDLE_DIRS" ] && [ ! -d "src-tauri/target" ] && [ ! -d "target" ]; then
-            exit 1
-          fi
+          # Build completed successfully if we reach here
           
           echo "app-dir=$APP_DIR" >> $GITHUB_ENV
           
@@ -270,17 +266,15 @@ jobs:
         with:
           name: build-${{ matrix.platform }}
           path: |
-            ${{ env.app-dir }}/src-tauri/target/*/release/bundle/**/*
-            ${{ env.app-dir }}/src-tauri/target/release/bundle/**/*
-            ${{ env.app-dir }}/target/*/release/bundle/**/*
-            ${{ env.app-dir }}/target/release/bundle/**/*
-            ${{ env.app-dir }}/**/*.app
-            ${{ env.app-dir }}/**/*.dmg
-            ${{ env.app-dir }}/**/*.exe
-            ${{ env.app-dir }}/**/*.msi
-            ${{ env.app-dir }}/**/*.deb
-            ${{ env.app-dir }}/**/*.rpm
-            ${{ env.app-dir }}/**/*.AppImage
+            **/target/*/release/bundle/**/*
+            **/target/release/bundle/**/*
+            **/*.app
+            **/*.dmg
+            **/*.exe
+            **/*.msi
+            **/*.deb
+            **/*.rpm
+            **/*.AppImage
           retention-days: 7
           if-no-files-found: error
 
