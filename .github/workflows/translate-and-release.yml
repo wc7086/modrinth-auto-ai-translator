@@ -43,25 +43,13 @@ jobs:
           repository: modrinth/code
           path: .
           submodules: recursive
-          token: ${{ github.token }}
         
       - name: Checkout translation scripts
         uses: actions/checkout@v4
         with:
           path: translator-scripts
           
-      - name: Restore translation cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            translation-cache.json
-          key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ github.run_id }}
-          restore-keys: |
-            translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-
-            translation-cache-${{ inputs.openai_model }}-
-            translation-cache-
-        
-      - name: Setup Node.js
+      - name: Setup Node.js and pnpm
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -72,54 +60,31 @@ jobs:
           package_json_file: 'package.json'
           run_install: false
           
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-        
-      - name: Setup pnpm cache
+      - name: Setup caches
         uses: actions/cache@v4
         with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          path: |
+            translation-cache.json
+            ~/.local/share/pnpm
+          key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+            translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-
+            translation-cache-${{ inputs.openai_model }}-
+            translation-cache-
           
-          
-      - name: Extract translatable text
-        run: |
-          echo "📝 Extracting translatable text from apps/app-frontend..."
-          cp translator-scripts/scripts/*.js .
-          node extract-text.js apps/app-frontend
-          
-      - name: Translate text with AI
+      - name: Extract and translate text
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_MODEL: ${{ inputs.openai_model }}
           API_ENDPOINT: ${{ inputs.api_endpoint }}
           TARGET_LANGUAGE: ${{ inputs.target_language }}
         run: |
-          echo "🤖 Translating text with ${{ inputs.openai_model }}..."
+          echo "📝 Processing translation..."
+          cp translator-scripts/scripts/*.js .
+          node extract-text.js apps/app-frontend
           node translate-text.js
           
-      - name: Save translation cache
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            translation-cache.json
-          key: translation-cache-${{ inputs.openai_model }}-${{ inputs.target_language }}-${{ github.run_id }}
-          
-      - name: Upload translation artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: translation-artifacts-${{ github.run_id }}
-          path: |
-            extracted-text.json
-            translations.json
-            translation-mapping.json
-            translation-cache.json
-          retention-days: 30
-          
-      - name: Replace text in source code
+      - name: Replace text and prepare release
         if: ${{ !inputs.dry_run }}
         run: |
           echo "🔄 Replacing text in source code..."
@@ -137,45 +102,19 @@ jobs:
       - name: Generate release tag
         id: generate-tag
         run: |
+          echo "🏷️ Generating release tag..."
           FINAL_TAG="${{ inputs.release_tag }}-$(echo '${{ inputs.target_language }}' | tr '[:upper:]' '[:lower:]' | sed 's/简体中文/zh-cn/g' | sed 's/繁体中文/zh-tw/g' | sed 's/english/en/g')"
           if [ "${{ inputs.release_tag }}" = "latest" ]; then
             SOURCE_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.9.5")
             FINAL_TAG="${SOURCE_TAG}-zh-cn"
           fi
           echo "release-tag=$FINAL_TAG" >> $GITHUB_OUTPUT
-          echo "🏷️ Release tag will be: $FINAL_TAG"
+          echo "🏷️ Release tag: $FINAL_TAG"
           
-      - name: Check SQLx cache files before upload
+      - name: Upload artifacts and source
         if: ${{ !inputs.dry_run }}
         run: |
-          echo "🔍 Checking for SQLx cache files in current directory..."
-          echo "📁 Current directory: $(pwd)"
-          echo "📁 Looking for packages directory:"
-          find . -name "packages" -type d
-          echo "📁 Looking for app-lib directory:"
-          find . -name "app-lib" -type d
-          echo "🗂️ Looking for .sqlx directories:"
-          find . -name ".sqlx" -type d
-          find . -name "sqlx-data.json" -type f
-          echo "📄 SQLx cache files:"
-          find . -path "*/.sqlx/*" -type f | head -10 || true
-          
-          echo "📄 Checking .gitignore for SQLx exclusions:"
-          if [ -f ".gitignore" ]; then
-            grep -n "sqlx\|\.sqlx" .gitignore || echo "No SQLx entries in .gitignore"
-          fi
-          
-          echo "📄 Forcing include .sqlx files in git:"
-          git add -f packages/app-lib/.sqlx/ || echo "Failed to force add .sqlx files"
-          echo "📊 Git status after force add:"
-          git status --porcelain | grep "sqlx" || echo "No sqlx files in git status"
-          
-      - name: Create complete source archive
-        if: ${{ !inputs.dry_run }}
-        run: |
-          echo "📦 Creating complete source archive..."
-          # Create tar archive to preserve all files including hidden ones and permissions
-          # Use --exclude patterns and ignore warnings about files changing during read
+          echo "📦 Creating source archive..."
           tar -czf translated-source.tar.gz \
             --exclude='.git' \
             --exclude='translator-scripts' \
@@ -183,7 +122,17 @@ jobs:
             --warning=no-file-changed \
             --warning=no-file-removed \
             . || [ $? -eq 1 ]
-          echo "✅ Archive created: $(ls -lh translated-source.tar.gz)"
+            
+      - name: Upload translation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: translation-artifacts-${{ github.run_id }}
+          path: |
+            extracted-text.json
+            translations.json
+            translation-mapping.json
+            translation-cache.json
+          retention-days: 30
           
       - name: Upload translated source code
         if: ${{ !inputs.dry_run }}
@@ -192,7 +141,6 @@ jobs:
           name: translated-source
           path: translated-source.tar.gz
           retention-days: 1
-          
 
   build-platforms:
     needs: translate
@@ -225,19 +173,14 @@ jobs:
         run: |
           echo "📦 Installing tar on Windows..."
           choco install gnuwin32-coreutils.install -y
-          echo "✅ tar installed successfully"
           
       - name: Extract translated source
         shell: bash
         run: |
-          echo "📦 Extracting translated source archive..."
-          cd download
-          tar -xzf translated-source.tar.gz -C ..
-          cd ..
-          rm -rf download
-          echo "✅ Source extracted successfully"
+          echo "📦 Extracting source archive..."
+          cd download && tar -xzf translated-source.tar.gz -C .. && cd .. && rm -rf download
           
-      - name: Setup Node.js
+      - name: Setup build environment
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -245,190 +188,73 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
+          package_json_file: 'package.json'
           run_install: false
           
-      - name: Get pnpm store directory
-        shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-        
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-          
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        
-      - name: Setup Rust cache
+      - name: Setup caches
         uses: actions/cache@v4
         with:
           path: |
+            ~/.local/share/pnpm
             ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-build-${{ hashFiles('**/pnpm-lock.yaml', '**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-
+            ${{ runner.os }}-build-
+          
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         
       - name: Install system dependencies
         if: matrix.system-deps != ''
         run: ${{ matrix.system-deps }}
         
-      - name: Simple directory search (All platforms)
-        id: find-app-dir-simple
+      - name: Find and build application
         shell: bash
         run: |
-          echo "🔍 Simple directory search..."
-          
-          # Find any directory that contains package.json with Tauri dependencies
-          FOUND_DIR=""
-          
-          # Search for package.json files and check for Tauri
-          while IFS= read -r -d '' pkg_file; do
-            echo "📄 Checking: $pkg_file"
-            dir=$(dirname "$pkg_file")
-            
-            # Check if this package.json contains Tauri dependencies or scripts
-            if grep -q "@tauri-apps\|tauri.*build" "$pkg_file" 2>/dev/null; then
-              echo "✅ Found Tauri project in: $dir"
-              # Also check if there's a src-tauri directory
-              if [ -d "$dir/src-tauri" ]; then
-                echo "✅ Confirmed: src-tauri directory exists"
-                FOUND_DIR="$dir"
-                break
-              else
-                echo "⚠️  Has Tauri dependencies but no src-tauri directory"
-              fi
-            fi
-          done < <(find . -name "package.json" -type f -print0)
-          
-          # If no Tauri found, look for any app-like directory with package.json
-          if [ -z "$FOUND_DIR" ]; then
-            echo "⚠️  No Tauri project found, looking for app directories..."
-            
-            # Check common app directory patterns
-            for pattern in "*/apps/*" "*/app" "apps/*" "app" "*frontend*" "frontend"; do
-              for dir in $pattern; do
-                if [ -d "$dir" ] && [ -f "$dir/package.json" ]; then
-                  echo "✅ Found app directory: $dir"
-                  FOUND_DIR="$dir"
-                  break 2
-                fi
-              done
-            done
+          echo "🔍 Finding Tauri application directory..."
+          APP_DIR=$(find . -name "package.json" -type f -exec grep -l "@tauri-apps" {} \; | head -1 | xargs dirname)
+          if [ -z "$APP_DIR" ]; then
+            APP_DIR="./apps/app"
           fi
+          echo "✅ Using app directory: $APP_DIR"
           
-          if [ -z "$FOUND_DIR" ]; then
-            echo "❌ Could not find any suitable app directory"
-            echo "📁 All directories:"
-            find . -type d | head -20
-            echo "📄 All package.json files:"
-            find . -name "package.json" -type f
-            exit 1
-          fi
+          echo "📦 Installing dependencies..."
+          cd "$APP_DIR" && pnpm install
           
-          echo "app-dir=$FOUND_DIR" >> $GITHUB_OUTPUT
-          echo "✅ Selected app directory: $FOUND_DIR"
-          
-          
-      - name: Check directory structure after download
-        shell: bash
-        run: |
-          echo "🔍 Checking directory structure in build phase..."
-          echo "📁 Current directory: $(pwd)"
-          echo "📁 Top-level contents:"
-          ls -la
-          echo "📁 Looking for packages directory:"
-          find . -name "packages" -type d
-          echo "📁 Looking for app-lib directory:"
-          find . -name "app-lib" -type d
-          echo "🗂️ Looking for .sqlx directories:"
-          find . -name ".sqlx" -type d
-          echo "📄 SQLx cache files:"
-          find . -path "*/.sqlx/*" -type f | head -10 || true
-          
-          echo "🔧 Checking workspace structure for app-lib dependency:"
-          if [ -f "Cargo.toml" ]; then
-            echo "📄 Root Cargo.toml workspace members:"
-            grep -A 10 "members" Cargo.toml || echo "No workspace members found"
-          fi
-          
-          echo "📁 SQLx cache status:"
-          SQLX_PATH="./packages/app-lib/.sqlx"
-          if [ -d "$SQLX_PATH" ]; then
-            echo "✅ SQLx cache found at: $SQLX_PATH"
-            echo "📄 SQLx cache files count: $(find $SQLX_PATH -name "*.json" | wc -l)"
-            ls -la "$SQLX_PATH" | head -5
-          else
-            echo "❌ SQLx cache not found at: $SQLX_PATH"
-          fi
-          
-      - name: Install Node dependencies
-        shell: bash
-        run: |
-          cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
-          pnpm install
-          
-          
-          
-          
-          
-          
-      - name: Build application
-        shell: bash
-        run: |
           echo "🏗️ Building for ${{ matrix.platform }}..."
-          cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
-          
-          echo "🚀 Running: pnpm build"
           pnpm build
           
-      - name: Check build results
-        shell: bash
-        run: |
-          cd "${{ steps.find-app-dir-simple.outputs.app-dir }}"
-          echo "📦 Checking for build artifacts..."
-          echo "🔍 Current directory: $(pwd)"
-          
-          # Look for various possible target locations
-          echo "🔍 Looking for target directories..."
-          find . -name "target" -type d | head -10
-          
-          echo "🔍 Looking for build outputs..."
-          ARTIFACTS=$(find . -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.rpm" | head -10)
-          
+          echo "📦 Checking build results..."
+          ARTIFACTS=$(find . -name "*.app" -o -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.msi" -o -name "*.rpm")
           if [ -n "$ARTIFACTS" ]; then
-            echo "✅ Found build artifacts:"
-            echo "$ARTIFACTS"
+            echo "✅ Build successful - artifacts found"
           else
             echo "❌ No build artifacts found"
             exit 1
           fi
           
-          echo "🔍 Looking for bundle directories..."
-          find . -name "bundle" -type d | head -10
+          echo "app-dir=$APP_DIR" >> $GITHUB_ENV
           
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-${{ matrix.platform }}
           path: |
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/src-tauri/target/*/release/bundle/**/*
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/src-tauri/target/release/bundle/**/*
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/target/*/release/bundle/**/*
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/target/release/bundle/**/*
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.app
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.dmg
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.exe
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.msi
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.deb
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.rpm
-            ${{ steps.find-app-dir-simple.outputs.app-dir }}/**/*.AppImage
+            ${{ env.app-dir }}/src-tauri/target/*/release/bundle/**/*
+            ${{ env.app-dir }}/src-tauri/target/release/bundle/**/*
+            ${{ env.app-dir }}/target/*/release/bundle/**/*
+            ${{ env.app-dir }}/target/release/bundle/**/*
+            ${{ env.app-dir }}/**/*.app
+            ${{ env.app-dir }}/**/*.dmg
+            ${{ env.app-dir }}/**/*.exe
+            ${{ env.app-dir }}/**/*.msi
+            ${{ env.app-dir }}/**/*.deb
+            ${{ env.app-dir }}/**/*.rpm
+            ${{ env.app-dir }}/**/*.AppImage
           retention-days: 7
           if-no-files-found: error
 
@@ -448,14 +274,6 @@ jobs:
           path: build-artifacts/
           merge-multiple: true
           
-      - name: List artifacts
-        run: |
-          echo "📦 Available build artifacts:"
-          find build-artifacts/ -type f \( -name "*.exe" -o -name "*.msi" -o -name "*.dmg" -o -name "*.pkg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) || echo "No standard installer files found"
-          echo ""
-          echo "📋 All files in build artifacts:"
-          find build-artifacts/ -type f | head -20
-          
       - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -464,7 +282,6 @@ jobs:
         run: |
           echo "🚀 Creating GitHub release..."
           
-          # Create release notes
           cat > release_notes.md << EOF
           # Modrinth Auto-Translated Release
           
@@ -475,7 +292,7 @@ jobs:
           ## Platforms Included
           - 🐧 Linux (AppImage, .deb, .rpm)
           - 🪟 Windows (.exe, .msi)
-          - 🍎 macOS (.dmg, .pkg) - Intel & Apple Silicon
+          - 🍎 macOS (.dmg) - Intel & Apple Silicon
           
           ## Installation
           1. Download the appropriate file for your platform
@@ -486,7 +303,6 @@ jobs:
           *This release was automatically generated by GitHub Actions*
           EOF
           
-          # Create release
           gh release create "$RELEASE_TAG" \
             --title "Modrinth $TARGET_LANGUAGE - $RELEASE_TAG" \
             --notes-file release_notes.md \
